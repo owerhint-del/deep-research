@@ -200,9 +200,12 @@ L3 Expert Research
 - [x] v0.1 — Шестиступенчатая research-лестница (L0→L5)
 - [x] v0.1 — Интеграция Firecrawl + Tavily
 - [x] v0.1.1 — L2 verification checkpoints (фикс «hollow synthesis»)
-- [ ] v0.2 — Codex CLI cross-model канал (L2+)
-- [ ] v0.3 — Дистрибуция через Claude Code plugin marketplace
-- [ ] v0.4 — Дополнительные search-бэкенды (Kagi, Exa, Perplexity API)
+- [x] v0.2 — Codex CLI cross-model канал (L2+)
+- [x] v0.3 — Общая verification-библиотека + flagship example
+- [x] v0.4 — Claude Code plugin manifest + миграция скиллов
+- [x] v0.5 — Exa MCP (neural semantic search)
+- [x] v0.6 — Perplexity MCP (answer engine)
+- [ ] v0.7 — Kagi как пятый backend для consumer research
 - [ ] v1.0 — Авто-синк L5 vault'ов в Obsidian
 
 См. [CHANGELOG.md](CHANGELOG.md).
