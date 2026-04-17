@@ -210,18 +210,20 @@ Total cost if you stick to free tiers: **$0**. With Codex: existing ChatGPT Pro 
 
 ## Roadmap
 
-- [x] v0.1 — Six-tier research ladder (L0→L5)
-- [x] v0.1 — Firecrawl + Tavily integration
+**Shipped:**
+- [x] v0.1 — Six-tier research ladder (L0→L5), Firecrawl + Tavily
+- [x] v0.1.1 — L2 verification checkpoints (anti-"hollow synthesis")
 - [x] v0.2 — Optional Codex CLI cross-model channel
-- [x] v0.3 — Shared verification library + flagship example
+- [x] v0.3 — Shared verification library + flagship live example
 - [x] v0.4 — Claude Code plugin manifest + skill migration
 - [x] v0.5 — Exa MCP (neural semantic search)
-- [x] v0.6 — Perplexity MCP (answer engine)
-- [ ] v0.2 — Codex CLI cross-model channel (L2+)
-- [ ] v0.2 — L2 hardening (verification checkpoints, scrape enforcement)
-- [ ] v0.3 — Claude Code plugin marketplace distribution
-- [ ] v0.3 — Russian documentation (`docs/ru/`)
-- [ ] v0.4 — Additional search backends (Kagi, Exa, Perplexity API)
+- [x] v0.6 — Perplexity MCP (answer engine — L0 killer path)
+
+**Planned:**
+- [ ] v0.7 — Kagi as 5th backend for consumer research (anti-SEO-spam)
+- [ ] v0.7 — Streaming Codex output (reduce L3 latency)
+- [ ] v0.7 — MCP-based Codex integration (replace Bash shell-out)
+- [ ] v0.8 — Full Russian translation of ARCHITECTURE + TROUBLESHOOTING
 - [ ] v1.0 — Obsidian auto-sync for L5 vaults
 
 See [CHANGELOG.md](CHANGELOG.md) for what's shipped.
