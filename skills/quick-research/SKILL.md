@@ -32,10 +32,32 @@ Fast lightweight research for simple questions. No planner, no reflection, no mu
 ## Pipeline
 
 ```
-1. SEARCH   — one parallel multi-source query
-2. READ     — scrape top 3 results
-3. ANSWER   — short structured response with citations
+v0.6.0+ fast path (Perplexity available):
+  ASK — one Perplexity call → synthesized answer + citations (~5 sec)
+
+Fallback path (Perplexity unavailable):
+  1. SEARCH   — parallel Firecrawl + Tavily
+  2. READ     — scrape top 3 results
+  3. ANSWER   — short structured response with citations
 ```
+
+## Fast path: Perplexity (v0.6.0+)
+
+If `mcp__perplexity-ask__perplexity_ask` is available AND `DEEP_RESEARCH_DISABLE_PERPLEXITY` is unset, **try Perplexity first**. It returns a synthesized answer with inline citations in one call — exactly L0's output shape, no scrape needed:
+
+```
+mcp__perplexity-ask__perplexity_ask with:
+  messages: [
+    {role: "user", content: "<user query>. Respond in 2-4 paragraphs with inline [N] citations followed by a Sources: list with [N] <URL> per line. Match the user's language (Russian/English)."}
+  ]
+```
+
+Response is ready to forward to user. Typical latency: 5 seconds.
+
+**Fall back to the SEARCH→READ→ANSWER path below** if:
+- Perplexity returns an error or rate limit
+- Response has fewer than 2 citations (quality check)
+- User explicitly wants independent verification (rare for L0)
 
 ## Step 1: SEARCH (parallel multi-source)
 
