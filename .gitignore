@@ -1,0 +1,53 @@
+# ============================================================
+# CRITICAL: Never commit secrets or private research artifacts
+# ============================================================
+
+# --- Credentials and secrets ---
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+credentials.json
+secrets.json
+auth.json
+
+# --- Claude Code local configs (may contain MCP URLs with keys) ---
+.claude/settings.local.json
+.claude/.credentials.json
+.mcp.local.json
+
+# --- Research artifacts (may contain scraped private content) ---
+# Keep examples/ visible so users can see demo runs.
+# Pattern: ignore everything inside .firecrawl/ except examples/.
+# Using .firecrawl/* (not .firecrawl/) lets git descend into the dir
+# so the negation for examples/ works.
+.firecrawl/*
+!.firecrawl/examples/
+
+# --- Agent work products (may contain user data) ---
+.claude/tasks/
+.claude/teams/
+.claude/memory/
+.claude/projects/
+
+# --- Logs and caches ---
+*.log
+.cache/
+__pycache__/
+node_modules/
+.DS_Store
+Thumbs.db
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Build artifacts ---
+dist/
+build/
+*.tsbuildinfo

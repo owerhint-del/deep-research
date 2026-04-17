@@ -1,0 +1,506 @@
+---
+name: academic-research
+description: Academic-grade research (L4) — runs /expert-research (L3) then adds academic sources (arXiv, Google Scholar), full multi-agent crew (Planner + 2x Researchers + Critic + Editor), timeline analysis, methodology section, and annotated bibliography with source quality ratings. ~40 min, 80-120 sources, 5000+ word report. Use for scientific overviews, research-grade investigations.
+user_invocable: true
+---
+
+# Academic Research — L4
+
+Academic-grade research tier. **Composes** on top of L3 (`/expert-research`) by adding:
+- **Academic sources** — arXiv, Google Scholar, SSRN, research.google, research papers
+- **Full multi-agent crew** — Planner, Researcher × 2 (parallel), Critic, Editor
+- **Timeline / history analysis** — how the topic evolved over time
+- **Methodology section** — explicit description of research approach
+- **Cross-language search** — EN + RU + domain-specific languages
+- **Quality-rated bibliography** — A/B/C/D ratings per source
+- **Open questions section** — what the literature hasn't answered
+
+**Position in ladder:** L4. Calls L3 (which chains through L2 and L1). Called by L5.
+
+## When to Use
+
+- Scientific/technical deep-dives: "как работают LLM router-агенты"
+- Research-grade investigations needing peer-reviewed backing
+- Topics with substantial academic literature (ML/AI, distributed systems, algorithms)
+- When user says "академический", "научный", "peer-reviewed", "с научной точки зрения"
+- Complex topics where vendor-driven sources aren't enough
+
+**Escalate to:**
+- `/ultra-research` (L5) — when you want a full knowledge base + playbooks + memory sync
+
+## Budget
+
+- Time: ~40 min total (L1: 5 + L2: 7 + L3: 8 + L4: 20)
+- Tavily credits: ~400
+- Sub-questions: 12
+- Sources: 80–120 (including 15–25 academic)
+- Output: 5000+ word academic report + annotated bibliography + timeline + methodology
+
+## Pipeline
+
+```
+STAGE 1: Execute /expert-research (L3)
+    → L1/ + L2/ + L3/ artifacts
+
+STAGE 2: L4 Academic Layer
+  1. ACADEMIC PLANNING           — scope the academic angle
+  2. MULTI-AGENT CREW SETUP      — spawn crew in parallel
+     ├─ Planner agent            — generates 4 new academic sub-qs
+     ├─ Researcher A (parallel)  — primary academic sources
+     ├─ Researcher B (parallel)  — cross-domain / adjacent fields
+     ├─ Critic (after R A+B)     — adversarial review of academic layer
+     └─ Editor (last)            — final synthesis pass
+  3. ACADEMIC SOURCE HARVESTING  — arXiv, Scholar, SSRN
+  4. CROSS-LANGUAGE SEARCH       — EN + RU + other relevant
+  5. TIMELINE CONSTRUCTION       — chronological development
+  6. METHODOLOGY DOCUMENTATION   — how research was done
+  7. QUALITY-RATED BIBLIOGRAPHY  — A/B/C/D per source
+  8. ACADEMIC SYNTHESIS          — formal structure
+```
+
+## Artifacts Directory
+
+```
+.firecrawl/research/<slug>/
+├── L1/ L2/ L3/                  # from lower levels
+└── L4/
+    ├── academic-plan.md
+    ├── crew/
+    │   ├── planner-output.md
+    │   ├── researcher-a-output.md
+    │   ├── researcher-b-output.md
+    │   ├── critic-output.md
+    │   └── editor-output.md
+    ├── sources/
+    │   ├── academic/            # arXiv, Scholar papers
+    │   │   ├── 50-<paper>.md
+    │   │   └── 50-<paper>.sum.md
+    │   └── secondary/
+    │       ├── 70-...
+    │       └── ...
+    ├── timeline.md
+    ├── methodology.md
+    ├── open-questions.md
+    ├── report.md                # 5000+ word academic report
+    ├── executive-summary.md     # updated from L3
+    ├── bibliography.md          # A/B/C/D rated
+    └── report.pdf
+```
+
+## Stage 1: Execute L3
+
+Invoke `expert-research` skill. Use `--go` flag semantic (no plan approval prompt — we're already committed at L4):
+
+```
+Skill: expert-research
+Args: <query> (note: running as L4 foundation, skip plan approval)
+```
+
+Wait for L3 completion. Verify L3 artifacts exist before proceeding.
+
+## Stage 2: L4 Academic Layer
+
+### Step 2.1: ACADEMIC PLANNING
+
+Read L3/report.md. Identify which parts have thin academic backing. Generate academic research scope:
+
+Write `L4/academic-plan.md`:
+```markdown
+# Academic Research Plan
+
+## Current academic coverage in L3
+- <what academic sources L3 already used>
+- <gaps in academic grounding>
+
+## Academic sub-questions (4 new)
+9. What does peer-reviewed literature say about X?
+10. What's the academic history/evolution of X?
+11. What are the theoretical foundations of X?
+12. What open research problems exist in X?
+
+## Academic sources to target
+- arXiv: [specific categories e.g. cs.LG, cs.CL]
+- Google Scholar: [key author names, seminal papers]
+- SSRN: [if applicable]
+- Research.google: [if applicable]
+- University CS departments: [Stanford, MIT, CMU relevant]
+```
+
+### Step 2.2: MULTI-AGENT CREW SETUP
+
+Spawn a crew of sub-agents. Use Agent tool with parallel dispatch for Researcher A and Researcher B.
+
+**Important:** use `run_in_background: true` for parallel researchers so they work simultaneously.
+
+#### Planner Agent (synchronous, fast)
+
+```
+Agent(subagent_type="general-purpose",
+      description="Academic planner for L4",
+      prompt="""
+You are an academic research planner.
+
+Read: .firecrawl/research/<slug>/L3/report.md
+And: .firecrawl/research/<slug>/L4/academic-plan.md
+
+Your job: refine the 4 academic sub-questions into specific, searchable queries.
+
+For each sub-question produce:
+- 3 specific search queries (mix of simple and advanced)
+- Target source types (arXiv category, Scholar keywords)
+- Expected difficulty (easy / medium / hard to find)
+- Why this sub-question matters for the main topic
+
+Write output to: .firecrawl/research/<slug>/L4/crew/planner-output.md
+""")
+```
+
+#### Researcher A (parallel, background)
+
+```
+Agent(subagent_type="general-purpose",
+      description="Academic researcher A — primary sources",
+      run_in_background=true,
+      prompt="""
+You are academic researcher A, focused on PRIMARY academic sources.
+
+Read: .firecrawl/research/<slug>/L4/crew/planner-output.md
+Your targets: arXiv papers, peer-reviewed journals, conference proceedings.
+
+For each of the 4 sub-questions, do:
+1. Search arXiv via Tavily or Firecrawl with "site:arxiv.org <query>"
+2. Search Google Scholar via Firecrawl with "site:scholar.google.com <query>"
+3. Scrape top 3-5 papers per sub-question
+4. Write summary .sum.md files to .firecrawl/research/<slug>/L4/sources/academic/
+5. Use numbering starting from 50
+
+For each paper summary include:
+- Title, authors, year, venue
+- Abstract (from paper)
+- Key findings
+- Methodology used
+- Limitations stated by authors
+- Relevance to our sub-question
+- Quality grade: A (top venue, cited) | B (decent venue) | C (preprint, limited citations)
+
+Finally write: .firecrawl/research/<slug>/L4/crew/researcher-a-output.md
+with:
+- List of papers found (with quality grades)
+- Key findings across papers
+- Consensus / conflicts in the literature
+- Gaps identified
+""")
+```
+
+#### Researcher B (parallel, background)
+
+```
+Agent(subagent_type="general-purpose",
+      description="Academic researcher B — cross-domain",
+      run_in_background=true,
+      prompt="""
+You are academic researcher B, focused on CROSS-DOMAIN and ADJACENT-FIELD sources.
+
+Read: .firecrawl/research/<slug>/L4/crew/planner-output.md
+
+Your targets:
+- Adjacent fields: if main topic is ML, look at stats/optimization/systems angles
+- Cross-language sources: Russian, Chinese, French academic work if applicable
+- Historical/foundational papers: seminal works that shaped the field
+- Cross-disciplinary applications: how the topic is used in other domains
+
+Search targets:
+- Russian academic: cyberleninka.ru, elibrary.ru, habr.com research posts
+- Classic papers: Google Scholar citation counts, ACM Digital Library
+- Adjacent fields: different arXiv categories than Researcher A
+
+For each source write .sum.md to .firecrawl/research/<slug>/L4/sources/secondary/
+Number starting from 70.
+
+Finally write: .firecrawl/research/<slug>/L4/crew/researcher-b-output.md
+with:
+- Cross-domain findings
+- Cross-language findings (translated summaries if non-English)
+- Historical context (which papers started the field, key evolutions)
+- Adjacent-field insights we might have missed
+""")
+```
+
+Wait for BOTH Researcher A and Researcher B to complete before proceeding.
+
+#### Critic Agent (synchronous, after researchers)
+
+```
+Agent(subagent_type="general-purpose",
+      description="Academic critic — L4 layer review",
+      prompt="""
+You are an academic critic. Review the L4 academic layer.
+
+Read:
+- .firecrawl/research/<slug>/L3/report.md
+- .firecrawl/research/<slug>/L4/crew/researcher-a-output.md
+- .firecrawl/research/<slug>/L4/crew/researcher-b-output.md
+- Sample sources from L4/sources/academic/*.sum.md
+
+Review questions:
+1. Are the academic sources actually high-quality or just preprints?
+2. Do Researcher A's findings contradict the L3 report's conclusions? If so, which is right?
+3. Are there missing seminal papers or key authors?
+4. Is the academic framing honest, or is it cherry-picking to support L3's conclusions?
+5. What's the academic consensus vs minority views? Are minority views represented?
+6. Are there methodological concerns with cited papers that should be flagged?
+
+Write findings to: .firecrawl/research/<slug>/L4/crew/critic-output.md
+
+Be harsh. Academic research needs academic rigor — not marketing.
+""")
+```
+
+#### Editor Agent (last, after critic)
+
+```
+Agent(subagent_type="general-purpose",
+      description="Academic editor — final synthesis",
+      prompt="""
+You are the editor. Your job: synthesize everything into a formal academic report.
+
+Read ALL L1-L4 artifacts:
+- L1/report.md, L2/report.md, L3/report.md
+- L4/crew/researcher-a-output.md, researcher-b-output.md, critic-output.md
+- L4/sources/academic/*.sum.md, L4/sources/secondary/*.sum.md
+- L3/fact-check.md, L2/contradictions.md
+
+Produce .firecrawl/research/<slug>/L4/crew/editor-output.md with:
+
+## Consolidated findings across all 4 layers
+## Where academic sources override popular-media sources
+## Where minority academic views deserve mention
+## Proposed structure for the final L4 report
+## Key claims to emphasize with academic backing
+## Claims to downgrade because academic literature contradicts them
+""")
+```
+
+### Step 2.3: TIMELINE CONSTRUCTION
+
+Read all summaries from L1–L4. Build a chronological timeline of the topic.
+
+Write `L4/timeline.md`:
+```markdown
+# Timeline: <topic>
+
+## Pre-<year> — Origins
+- <year>: <event> — <citation>
+- ...
+
+## <year>-<year> — Early development
+- ...
+
+## <year>-<year> — Maturation
+- ...
+
+## <year>-2026 — Current state
+- ...
+
+## What's next (speculation based on recent papers)
+- ...
+```
+
+### Step 2.4: METHODOLOGY DOCUMENTATION
+
+Write `L4/methodology.md` — transparency about how this research was conducted:
+
+```markdown
+# Research Methodology
+
+## Levels executed
+- L1 (base): planner + 10-15 sources + summaries
+- L2 (deep): reflection + contradiction detection + 10-15 additional sources
+- L3 (expert): 3-angle search + fact-check + critic + 10-15 more sources
+- L4 (academic): multi-agent crew + 15-25 academic sources
+
+## Agents used (L4)
+- Planner, Researcher A, Researcher B, Critic, Editor
+
+## Source types and counts
+| Type | Count | Quality A | Quality B | Quality C | Quality D |
+|---|---|---|---|---|---|
+| Official docs | N | ... |
+| Academic papers | N | ... |
+| Tech blogs | N | ... |
+| Community | N | ... |
+
+## Search engines used
+- Firecrawl, Tavily
+- arXiv.org (via site-specific search)
+- Google Scholar (via site-specific search)
+
+## Languages
+- English: primary
+- Russian: <count> sources
+- Other: <count>
+
+## Biases acknowledged
+- <known limitations of this approach>
+- <sources we couldn't access>
+- <topics we couldn't verify independently>
+
+## Reproducibility
+- All source URLs listed in bibliography.md
+- All search queries logged in */plan.md files
+- Timestamp: <date>
+```
+
+### Step 2.5: QUALITY-RATED BIBLIOGRAPHY
+
+Re-grade ALL sources (L1 + L2 + L3 + L4) into A/B/C/D:
+
+- **A** — Primary source (official docs, peer-reviewed paper in top venue, original research)
+- **B** — Authoritative secondary (established tech blog, conference paper, industry report)
+- **C** — Supplementary (community discussion, preprint, developer blog)
+- **D** — Unreliable (SEO spam, low-quality aggregator, unsourced claims) — should rarely be cited
+
+Write `L4/bibliography.md`:
+```markdown
+# Annotated Bibliography (L4)
+
+## Quality A sources (<count>)
+1. **[Title]**(URL) — Authors, Year, Venue
+   Type: peer-reviewed paper | official docs | ...
+   Contribution: [what it adds to this research]
+   Quality: A — [reason: top venue, X citations, authoritative]
+
+## Quality B sources (<count>)
+...
+
+## Quality C sources (<count>)
+...
+
+## Quality D sources (<count>, flagged)
+... [if any, explain why retained]
+```
+
+### Step 2.6: OPEN QUESTIONS
+
+Write `L4/open-questions.md`:
+```markdown
+# Open Research Questions
+
+Based on the academic literature surveyed, these are questions without a clear answer:
+
+## Unresolved in the literature
+- <question 1>: <why it's open, which papers touch it>
+- ...
+
+## Contested
+- <question 2>: <camps, their positions>
+
+## Implied by L4 findings but not directly studied
+- ...
+
+## What would resolve them
+- [what kind of research / data / experiment would answer]
+```
+
+### Step 2.7: ACADEMIC SYNTHESIS
+
+Produce `L4/report.md`. This supersedes L3/report.md.
+
+Academic-style structure:
+```markdown
+# <Topic Title>: An Academic Review
+
+**Query:** <original>
+**Level:** L4 (Academic)
+**Sources:** <total>, of which <academic count> peer-reviewed
+**Generated:** <date>
+
+## Abstract
+[200-word academic abstract: background, method, findings, conclusion]
+
+## 1. Introduction
+### 1.1 Background
+### 1.2 Scope of this review
+### 1.3 Methodology (brief; see methodology.md for details)
+
+## 2. Historical Development
+[Based on timeline.md — chronological evolution with citations]
+
+## 3. Theoretical Foundations
+[If applicable — underlying theory, formalism, mathematical background]
+
+## 4. Current State of the Art
+### 4.1 [Sub-topic 1]
+### 4.2 [Sub-topic 2]
+### 4.3 [Sub-topic 3]
+### 4.4 [Sub-topic 4]
+
+## 5. Critical Analysis
+### 5.1 Strengths
+### 5.2 Limitations
+### 5.3 Contested claims
+### 5.4 Minority views worth considering
+
+## 6. Cross-Domain Connections
+[From Researcher B's findings]
+
+## 7. Practical Implications
+[How academic findings translate to practice — bridge to L3 practical content]
+
+## 8. Open Questions
+[Summary pointing to open-questions.md]
+
+## 9. Conclusion
+
+## References
+[See bibliography.md for full annotated list]
+
+## Appendices
+- A. Search queries used (from all plan.md files)
+- B. Timeline (see timeline.md)
+- C. Methodology (see methodology.md)
+```
+
+**Target length:** 5000–7000 words.
+
+### Step 2.8: PDF Export
+
+```bash
+cd .firecrawl/research/<slug>/L4/
+pandoc report.md -o report.pdf \
+  --pdf-engine=xelatex \
+  --toc \
+  --number-sections \
+  -V geometry:margin=1in \
+  -V fontsize=11pt 2>/dev/null || \
+pandoc report.md -o report.html --toc
+```
+
+## Final Output
+
+1. Show user the Abstract + Conclusion sections in chat
+2. Stats:
+   > 📊 L4 stats: <total> sources (<academic> academic, quality: A:<n> B:<n> C:<n>)
+   > 🤖 Crew: 5 agents (Planner + 2×Researcher + Critic + Editor)
+   > 📄 Report: <word_count> words, academic style
+3. Artifacts:
+   > `.firecrawl/research/<slug>/L4/` — report.md, report.pdf, timeline.md, methodology.md, open-questions.md, bibliography.md
+4. Escalation:
+   > Нужна полная база знаний с playbook'ами и памятью? `/ultra-research` (L5) — финальный уровень.
+
+## Rules
+
+- **Always call L3 first** — never inline L3 logic
+- **Crew runs in parallel** — Researcher A and B use `run_in_background: true`
+- **Academic sources are non-negotiable** — target 15+ peer-reviewed/preprint papers
+- **Quality grading is honest** — most blog posts are B or C, not A
+- **Timeline is grounded in sources** — every date needs citation
+- **Methodology is transparent** — we explain what we did and didn't do
+- **Cross-language matters** — at least attempt Russian sources when topic allows
+- **Preserve all lower-level artifacts**
+
+## Called from L5
+
+When L5 calls this skill:
+- Run full L4 pipeline
+- L5 reads L4/report.md, L4/timeline.md, L4/open-questions.md, L4/bibliography.md as foundation
