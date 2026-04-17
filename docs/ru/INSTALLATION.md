@@ -40,7 +40,7 @@
 ## Путь A — Быстрая установка (5 мин)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/deep-research.git
+git clone https://github.com/hint-shu/deep-research.git
 cd deep-research
 bash scripts/install.sh
 ```
@@ -136,7 +136,7 @@ codex exec -c 'web_search="live"' --sandbox read-only \
 ### 4. Клонировать и установить скиллы
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/deep-research.git
+git clone https://github.com/hint-shu/deep-research.git
 cd deep-research
 bash scripts/install.sh
 ```

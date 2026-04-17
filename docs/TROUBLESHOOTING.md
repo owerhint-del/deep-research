@@ -231,7 +231,7 @@ If you committed a Tavily/Firecrawl key to git:
 
 If your problem isn't here:
 
-1. Check [GitHub issues](https://github.com/YOUR_USERNAME/deep-research/issues) for duplicates
+1. Check [GitHub issues](https://github.com/hint-shu/deep-research/issues) for duplicates
 2. Open a new issue with:
    - Exact command you ran
    - Exact error (paste, don't paraphrase)

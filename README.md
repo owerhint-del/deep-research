@@ -63,7 +63,7 @@ Full setup: see [docs/INSTALLATION.md](docs/INSTALLATION.md).
 ### Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/deep-research.git
+git clone https://github.com/hint-shu/deep-research.git
 cd deep-research
 bash scripts/install.sh
 ```

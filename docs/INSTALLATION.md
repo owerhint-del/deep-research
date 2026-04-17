@@ -38,7 +38,7 @@ Optional but recommended:
 ## Path A — Quick install (5 min)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/deep-research.git
+git clone https://github.com/hint-shu/deep-research.git
 cd deep-research
 bash scripts/install.sh
 ```
@@ -134,7 +134,7 @@ If this returns a sensible answer, Codex is ready.
 ### 4. Clone and install skills
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/deep-research.git
+git clone https://github.com/hint-shu/deep-research.git
 cd deep-research
 bash scripts/install.sh
 ```
