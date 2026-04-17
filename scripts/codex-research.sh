@@ -98,38 +98,50 @@ run_timed "$TIMEOUT_SECS" codex exec \
 
 EXIT=$?
 
-# --- 6. Classify the failure, if any ---
+# --- 6. Classify outcome ---
 STDERR_CONTENT=$(cat "$STDERR_FILE" 2>/dev/null || true)
 
-# 6a. Auth failure (the most common Codex issue in practice)
-if echo "$STDERR_CONTENT" | grep -qiE 'invalid_grant|token.*refresh.*failed|not authenticated|auth.*expired|Grant not found|401 Unauthorized'; then
-    write_status "AUTH_FAILED: Codex auth expired — run 'codex auth login' to refresh"
-    rm -f "$OUTPUT_FILE"
-    exit 127
+# 6a. SUCCESS comes FIRST. If Codex exited cleanly AND produced non-trivial
+#     output, trust that output — don't let noisy stderr warnings (e.g. the
+#     MCP transport token-refresh noise Codex 0.120 emits in the background)
+#     cause us to throw away valid research results.
+if [ "$EXIT" -eq 0 ] && [ -s "$OUTPUT_FILE" ]; then
+    SIZE=$(wc -c < "$OUTPUT_FILE" | tr -d ' ')
+    if [ -n "$STDERR_CONTENT" ]; then
+        # Preserve stderr for debugging but don't fail on it
+        cp "$STDERR_FILE" "${OUTPUT_FILE}.stderr" 2>/dev/null || true
+        write_status "SUCCESS: Codex wrote ${SIZE} bytes (stderr saved to .stderr for reference)"
+    else
+        write_status "SUCCESS: Codex wrote ${SIZE} bytes to $OUTPUT_FILE"
+    fi
+    exit 0
 fi
 
-# 6b. Rate limit (Codex returns various forms; catch broadly)
-if echo "$STDERR_CONTENT" | grep -qiE 'rate.?limit|quota.*exceeded|429|too many requests'; then
-    write_status "RATE_LIMITED: Codex rate-limit hit — skill will continue single-model"
-    rm -f "$OUTPUT_FILE"
-    exit 128
-fi
-
-# 6c. Timeout (124 = GNU/BSD timeout, 142 = SIGALRM from perl)
+# 6b. Timeout — check exit code directly (124 = GNU/BSD timeout, 142 = SIGALRM from perl)
 if [ "$EXIT" -eq 124 ] || [ "$EXIT" -eq 142 ]; then
     write_status "TIMEOUT: Codex exceeded ${TIMEOUT_SECS}s limit"
     rm -f "$OUTPUT_FILE"
     exit 124
 fi
 
-# --- 7. Success check ---
-if [ "$EXIT" -eq 0 ] && [ -s "$OUTPUT_FILE" ]; then
-    SIZE=$(wc -c < "$OUTPUT_FILE" | tr -d ' ')
-    write_status "SUCCESS: Codex wrote ${SIZE} bytes to $OUTPUT_FILE"
-    exit 0
+# 6c. Auth failure — only considered when Codex ACTUALLY failed (non-zero exit or empty output)
+#     and stderr points clearly to auth issues in the primary flow (not MCP transport noise)
+if [ "$EXIT" -ne 0 ] || [ ! -s "$OUTPUT_FILE" ]; then
+    if echo "$STDERR_CONTENT" | grep -qiE '401 Unauthorized|not authenticated|auth.*expired|please.*login|not logged in'; then
+        write_status "AUTH_FAILED: Codex auth expired — run 'codex auth login' to refresh"
+        rm -f "$OUTPUT_FILE"
+        exit 127
+    fi
+
+    # 6d. Rate limit
+    if echo "$STDERR_CONTENT" | grep -qiE 'rate.?limit|quota.*exceeded|429|too many requests'; then
+        write_status "RATE_LIMITED: Codex rate-limit hit — skill will continue single-model"
+        rm -f "$OUTPUT_FILE"
+        exit 128
+    fi
 fi
 
-# --- 8. Generic failure ---
-write_status "FAILED: Codex exit ${EXIT}. Stderr: $(echo "$STDERR_CONTENT" | head -3 | tr '\n' ' ')"
+# --- 7. Generic failure ---
+write_status "FAILED: Codex exit ${EXIT}, output empty or missing. Stderr head: $(echo "$STDERR_CONTENT" | head -2 | tr '\n' ' ')"
 rm -f "$OUTPUT_FILE"
 exit "$EXIT"
