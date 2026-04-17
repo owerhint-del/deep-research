@@ -98,6 +98,11 @@ run_timed "$TIMEOUT_SECS" codex exec \
 
 EXIT=$?
 
+# --- 5b. Always preserve full stderr as .log for diagnostics ---
+# Even on timeout or auth failure, this log shows which stage Codex reached
+# (startup, auth, search, synthesis). Critical for debugging timeouts.
+cp "$STDERR_FILE" "${OUTPUT_FILE}.log" 2>/dev/null || true
+
 # --- 6. Classify outcome ---
 STDERR_CONTENT=$(cat "$STDERR_FILE" 2>/dev/null || true)
 

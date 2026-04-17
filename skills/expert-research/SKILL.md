@@ -31,11 +31,13 @@ Expert research tier. **Composes** on top of L2 (`/deep-research`) by adding:
 
 ## Budget
 
-- Time: ~20 min total (L1: ~5 + L2: ~7 + L3: ~8)
+- Time: ~20-25 min total (L1: ~5 + L2: ~7 + L3: ~8-13)
 - Tavily credits: ~150
+- **Subagent tokens: ~50-80K** (critic agent via Agent tool) — added in v0.2.2 budget doc
+- **Codex credits (if available): ~200-300K tokens** across 2 parallel calls (neutral + critic)
 - Sub-questions: 8 (L1: 3 + L2: 2 + L3: 3)
 - Sources: 40–60
-- Output: 3000+ word report + executive summary + PDF export
+- Output: **2000-3000 word report** + executive summary + PDF export (target relaxed in v0.2.2 based on real-session testing; prior 3000-4500 was unrealistic for single-session execution without heavy subagent delegation)
 
 ## Pipeline
 
@@ -173,6 +175,8 @@ Write `L3/perspective-plan.md`:
 
 Run 9 searches in parallel (3 queries × 3 angles) using Firecrawl + Tavily.
 
+> **v0.2.2: persist Tavily results.** After each `mcp__tavily__tavily_search` call, write the response JSON to `.firecrawl/research/$SLUG/L3/tavily-<angle>-<n>.json` (angle = proponent/critic/neutral, n = query index) using the Write tool. MCP responses live in conversation context only; disk persistence makes them auditable and survivable across compaction.
+
 Critical: use different search tactics per angle:
 - Proponent angle: official docs, vendor blogs
 - Critic angle: HN discussions, "we moved from X" blog posts, issue trackers
@@ -234,14 +238,14 @@ CODEX_HELPER="$HOME/.claude/scripts/codex-research.sh"
 
 # Call 1: Neutral-angle researcher (GPT-5.4 with its own index)
 if [ -x "$CODEX_HELPER" ]; then
-    bash "$CODEX_HELPER" 240 \
+    bash "$CODEX_HELPER" 360 \
         ".firecrawl/research/$SLUG/L3/codex-neutral.md" \
         "You are an independent research assistant. Research the query '<ORIGINAL QUERY>' from a skeptical, neutral angle — ignore vendor marketing and hype. Look for benchmarks, independent reviewers, community experiences, and failures. Return 8-12 key findings with source URLs. Include dates. Be concise (≤1000 words)." &
     CODEX_NEUTRAL_PID=$!
 
     # Call 2: Cross-model critic (reads the L2 report and attacks conclusions)
     L2_REPORT=$(cat ".firecrawl/research/$SLUG/L2/report.md" 2>/dev/null | head -300)
-    bash "$CODEX_HELPER" 240 \
+    bash "$CODEX_HELPER" 360 \
         ".firecrawl/research/$SLUG/L3/codex-critic.md" \
         "You are a skeptical research critic. Review this research report adversarially. Challenge main conclusions. Find what's missing, wrong, or oversimplified. Use your own web search to verify or refute key claims. Return a critic report (≤1000 words).
 
@@ -432,11 +436,57 @@ Structure:
 [See L3/bibliography.md for full list]
 ```
 
-**Target length:** 3000–4500 words.
+**Target length:** **2000–3000 words** (v0.2.2 relaxed from 3000-4500 based on real-session testing — old target was unachievable without aggressive subagent delegation and caused truncation artifacts).
 
 ### Step 2.9: Executive Summary
 
 Write separate `L3/executive-summary.md` — 500 words max. For stakeholders who won't read the full report. Plain language, no jargon.
+
+### 🛑 L3 FINAL CHECKPOINT (added v0.2.2)
+
+Before delivering the report, run this Bash verification. Mirrors the L2 CHECKPOINT 4 discipline — L3 was previously only prose-level verified, which was a regression from L2.
+
+```bash
+SLUG="<slug>"
+L3_DIR=".firecrawl/research/$SLUG/L3"
+
+# 1. Report must exist and meet minimum size (2000 words — v0.2.2 target)
+test -s "$L3_DIR/report.md" || { echo "❌ L3 report missing"; exit 1; }
+REPORT_WORDS=$(wc -w < "$L3_DIR/report.md")
+[ "$REPORT_WORDS" -ge 2000 ] || { echo "❌ L3 report only $REPORT_WORDS words, need ≥2000"; exit 1; }
+
+# 2. Executive summary exists (for stakeholders)
+test -s "$L3_DIR/executive-summary.md" || { echo "❌ executive-summary.md missing"; exit 1; }
+
+# 3. Critic report exists (from subagent — MANDATORY per skill rules)
+test -s "$L3_DIR/critic-report.md" || { echo "❌ critic-report.md missing — critic subagent was not invoked"; exit 1; }
+
+# 4. Fact-check exists (top 5 claims verified)
+test -s "$L3_DIR/fact-check.md" || { echo "❌ fact-check.md missing"; exit 1; }
+
+# 5. Bibliography exists
+test -s "$L3_DIR/bibliography.md" || { echo "❌ bibliography.md missing"; exit 1; }
+
+# 6. Perspective plan (3-angle) exists
+test -s "$L3_DIR/perspective-plan.md" || { echo "❌ perspective-plan.md missing"; exit 1; }
+
+# 7. L3 source summaries exist (≥8 new sources beyond L1/L2)
+L3_SUM_COUNT=$(ls "$L3_DIR"/sources/*.sum.md 2>/dev/null | wc -l | tr -d ' ')
+[ "$L3_SUM_COUNT" -ge 8 ] || { echo "❌ Only $L3_SUM_COUNT L3 summaries, need ≥8"; exit 1; }
+
+# 8. Citation traceability — multi-citation safe regex (v0.2.2)
+CITATIONS=$(grep -oE '\[[0-9][0-9, ]*\]' "$L3_DIR/report.md" | tr -d '[] ' | tr ',' '\n' | grep -vE '^$' | sort -un)
+for N in $CITATIONS; do
+    grep -qE "^${N}\." "$L3_DIR/bibliography.md" || {
+        echo "❌ Citation [${N}] in L3 report but not in bibliography"
+        exit 1
+    }
+done
+
+echo "✅ L3 FINAL CHECKPOINT PASSED: $REPORT_WORDS-word report, $L3_SUM_COUNT L3 sources, bibliography + critic + fact-check verified, all citations traceable"
+```
+
+**Only proceed to PDF export (Step 2.10) after this prints `✅ L3 FINAL CHECKPOINT PASSED`.**
 
 ### Step 2.10: PDF Export
 

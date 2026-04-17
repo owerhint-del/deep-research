@@ -210,6 +210,8 @@ wait
 
 Plus Tavily for each with `search_depth: "advanced"`.
 
+> **v0.2.2: persist Tavily results.** Tavily goes through MCP — its output lives in conversation context by default, not on disk. After each `mcp__tavily__tavily_search` call, use the Write tool to save the returned JSON to `.firecrawl/research/$SLUG/L2/tavily-N.json`. This makes Tavily findings auditable and survivable across context compaction.
+
 **Special L2 search tactics:**
 
 - Add contrarian terms: "problems with X", "X issues", "X vs alternatives"
@@ -517,8 +519,11 @@ test -s "$L2_DIR/gap-analysis.md" || { echo "❌ gap-analysis.md missing"; exit 
 test -s "$L2_DIR/followup-plan.md" || { echo "❌ followup-plan.md missing"; exit 1; }
 
 # 6. Every [N] citation in the report must exist in bibliography
-#    Extract all citation numbers, check each has a matching "^<N>\." line in bibliography
-CITATIONS=$(grep -oE '\[[0-9]+\]' "$L2_DIR/report.md" | tr -d '[]' | sort -u)
+#    Handles both single [N] and multi-citation [N, M, K] formats (v0.2.2 fix).
+#    Without the comma-split, multi-citations like [1, 3, 16] were silently
+#    missed by the earlier regex, allowing hallucinated citation numbers to
+#    pass verification when they appeared in multi-cite form.
+CITATIONS=$(grep -oE '\[[0-9][0-9, ]*\]' "$L2_DIR/report.md" | tr -d '[] ' | tr ',' '\n' | grep -vE '^$' | sort -un)
 for N in $CITATIONS; do
     grep -qE "^${N}\." "$L2_DIR/bibliography.md" || {
         echo "❌ Citation [${N}] in report but not in bibliography"

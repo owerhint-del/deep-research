@@ -88,12 +88,12 @@ while ! saturated; do
 
     if [ -x "$CODEX_HELPER" ]; then
         # Researcher C for this iteration
-        bash "$CODEX_HELPER" 300 \
+        bash "$CODEX_HELPER" 420 \
             "$ITER_DIR/codex-researcher-c.md" \
             "<prompt targeting this iteration's sub-questions>" &
 
         # Fact-check of last iteration's claims
-        bash "$CODEX_HELPER" 180 \
+        bash "$CODEX_HELPER" 300 \
             "$ITER_DIR/codex-factcheck.md" \
             "<fact-check prompt reading previous iteration's main findings>" &
 

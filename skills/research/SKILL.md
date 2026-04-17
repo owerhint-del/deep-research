@@ -124,6 +124,8 @@ mcp__tavily__tavily_search with:
   search_depth: "advanced"
 ```
 
+> **v0.2.2: persist Tavily results.** Tavily goes through MCP — its output lives in conversation context by default, not on disk. After each `mcp__tavily__tavily_search` call, use the Write tool to save the returned JSON (or the full result object) to `.firecrawl/research/$SLUG/L1/tavily-N.json` where N matches the sub-question index. Without persistence, Tavily findings disappear after context compaction and can't be audited.
+
 **Search query refinement rules:**
 - Add year ("2026") for freshness-sensitive topics
 - For Russian-language topics: one query in Russian + one in English
@@ -278,7 +280,8 @@ for f in "$L1_DIR"/sources/*.md; do
 done
 
 # 6. Every [N] citation in report must exist in bibliography
-CITATIONS=$(grep -oE '\[[0-9]+\]' "$L1_DIR/report.md" | tr -d '[]' | sort -u)
+#    Handles both single [N] and multi-citation [N, M, K] formats (v0.2.2 fix)
+CITATIONS=$(grep -oE '\[[0-9][0-9, ]*\]' "$L1_DIR/report.md" | tr -d '[] ' | tr ',' '\n' | grep -vE '^$' | sort -un)
 for N in $CITATIONS; do
     grep -qE "^${N}\." "$L1_DIR/bibliography.md" || { echo "❌ Citation [${N}] missing from bibliography"; exit 1; }
 done
