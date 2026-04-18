@@ -1,0 +1,12 @@
+{
+  "query": "Claude Code skill security prompt injection debugging production 2026",
+  "persisted": "v0.2.2 — Tavily MCP responses saved to disk for audit trail",
+  "top_results": [
+    {"url": "https://www.truefoundry.com/blog/claude-code-prompt-injection", "title": "Prompt Injection and AI Agent Security Risks: A Claude Code Guide", "score": 0.78},
+    {"url": "https://datasciencedojo.com/blog/prompt-injection-explained/", "title": "Prompt Injection & Claude Computer Use: 2026 Guide", "score": 0.75},
+    {"url": "https://www.getaiperks.com/en/articles/claude-code-security", "title": "Claude Code Security: AI Vulnerability Scanning in 2026", "score": 0.74},
+    {"url": "https://www.firecrawl.dev/blog/best-claude-code-skills", "title": "Best Claude Code Skills to Try in 2026 - Firecrawl (duplicate from L1)", "score": 0.73},
+    {"url": "https://www.artifilog.com/posts/must-have-claude-code-skills", "title": "10 Must-Have Claude Code Skills in 2026: A Practical Guide", "score": 0.71},
+    {"url": "https://www.cloudeagle.ai/blogs/claude-security", "title": "How Secure Is Claude AI in 2026 - CloudEagle", "score": 0.70}
+  ]
+}

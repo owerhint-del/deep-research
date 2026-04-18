@@ -1,0 +1,11 @@
+{
+  "query": "Claude plugin marketplace enterprise private admin 2026 moderation",
+  "persisted": "v0.2.2 — Tavily MCP responses saved to disk for audit trail",
+  "top_results": [
+    {"url": "https://almcorp.com/blog/claude-cowork-plugins-enterprise-guide/", "title": "Claude Cowork Plugins for Enterprise: Complete Guide [2026]", "score": 0.82},
+    {"url": "https://www.adwaitx.com/claude-cowork-enterprise-plugins", "title": "Claude Cowork Enterprise Plugins: How Anthropic Is Rebuilding the AI Workplace in 2026", "score": 0.76},
+    {"url": "https://www.eesel.ai/blog/claude-cowork-plugins-updates", "title": "Claude Cowork plugins updates: What's new in 2026", "score": 0.74},
+    {"url": "https://medium.com/algomart/claude-plugins-in-2026-the-upgrade-that-turns-ai-into-a-teammate", "title": "Claude Plugins in 2026 (Medium)", "score": 0.68},
+    {"url": "https://aimaker.substack.com/p/anthropic-claude-updates-q1-2026-guide", "title": "Q1 2026 Guide (from L1)", "score": 0.67}
+  ]
+}

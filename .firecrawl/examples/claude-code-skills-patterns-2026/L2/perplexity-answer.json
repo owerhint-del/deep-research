@@ -1,0 +1,14 @@
+{
+  "query": "Claude Code's plugin marketplace facts — public launch date, enterprise private marketplace features, moderation mechanisms, known security/quality issues",
+  "backend": "perplexity-ask MCP (v0.6.0 integration)",
+  "answer_excerpt": "Claude Code's plugin marketplace is part of Anthropic's unified Skills and Plugins system. Broader Claude Marketplace launched March 6, 2026. Claude Cowork's private plugin marketplaces for enterprises debuted February 24, 2026. Enterprise private marketplaces accessed through 'Customize' menu, supporting starter templates, scratch builds, conversational setup. Features: per-user/team access controls, auto-install, visibility restrictions, private GitHub repos. April 2026 updates included 'quiet security hardening' — PID-namespace sandboxing, script caps, fail-closed settings refresh. No widespread quality issues reported; updates emphasize stability.",
+  "citations": [
+    "https://www.youtube.com/watch?v=uLh6AB51QzU",
+    "https://almcorp.com/blog/claude-cowork-plugins-enterprise-guide/",
+    "https://aimaker.substack.com/p/anthropic-claude-updates-q1-2026-guide",
+    "https://www.anthropic.com/news/claude-opus-4-7",
+    "https://www.claudepluginhub.com/marketplaces/secondsky-claude-skills",
+    "https://releasebot.io/updates/anthropic",
+    "https://www.the-ai-corner.com/p/everything-claude-shipped-2026-complete-guide"
+  ]
+}
