@@ -50,10 +50,12 @@ skills/osint-research/
 │   ├── crtsh.sh
 │   ├── wayback.sh
 │   ├── shodan-idb.sh
-│   ├── github-leaks.sh
+│   ├── github-leaks.sh           # GitHub code search for leaked secrets/keys
 │   ├── theharvester-wrap.sh
 │   ├── subfinder-wrap.sh
-│   └── dorks.sh
+│   ├── dorks.sh                  # general Tavily/Firecrawl dorks
+│   ├── breach-leak-dorks.sh      # specialized dorks against pastebin/dump sites
+│   └── hibp-pwd.sh               # HIBP Pwned Passwords k-anon (password-only)
 ├── templates/
 │   ├── osint-report.md.tpl     # hybrid report template
 │   └── graph.mmd.tpl           # mermaid graph template
@@ -133,15 +135,16 @@ Classifier sits in `lib/entity-classifier.sh`. Type drives which channels run.
 | theHarvester | ✅ | — | — | — | ✅ |
 | subfinder | ✅ | — | — | — | ✅ |
 | GitHub code search | ✅ | — | ✅ | ✅ | ✅ |
-| HIBP Pwned Pwds (k-anon) | — | — | ✅ | — | ✅ |
-| Tavily Dorks | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Breach-leak dorks (Tavily) | ✅ | — | ✅ | ✅ | ✅ |
+| HIBP Pwned Passwords (k-anon) | — | — | ⚠️ password-only | — | — |
+| Tavily Dorks (general) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Firecrawl scrape | ✅ | — | — | ✅ | ✅ |
 | Exa neural | — | — | — | ✅ | ✅ |
 | Perplexity | — | — | — | ✅ | ✅ |
 
 ### 4.4 Phase composition
 
-**Phase 1 (parallel):** Whois, DNS, crt.sh, Wayback, GitHub code search, theHarvester, subfinder, Tavily dorks, HIBP Pwned Pwds (when entity is email), Perplexity (when entity is person/company). All independent — no shared inputs.
+**Phase 1 (parallel):** Whois, DNS, crt.sh, Wayback, GitHub code search, theHarvester, subfinder, Tavily general dorks, breach-leak dorks (specialized Tavily queries against pastebin/breachforums-style domains), HIBP Pwned Passwords (only when user explicitly provides a password to test, not as automatic email enrichment), Perplexity (when entity is person/company). All independent — no shared inputs.
 
 **Phase 2 (depends on Phase 1):**
 - Shodan IDB queries — needs IPs from DNS resolve
@@ -154,8 +157,8 @@ Classifier sits in `lib/entity-classifier.sh`. Type drives which channels run.
 
 Each channel feeds raw data through `findings-extractor.sh`, which assigns priority by rules:
 
-- 🔴 **CRITICAL:** leaked credentials, exposed databases without auth (Shodan IDB shows open Redis/Mongo/Elasticsearch), private keys in public GitHub repos, plaintext password breaches
-- 🟠 **HIGH:** exposed admin panels, default credentials hints, known CVEs on detected open ports, employee emails in breach databases, takeover-vulnerable subdomains
+- 🔴 **CRITICAL:** leaked credentials in public GitHub repos, exposed databases without auth (Shodan IDB shows open Redis/Mongo/Elasticsearch), private keys committed to public sources, plaintext credentials surfaced via breach-leak dorks
+- 🟠 **HIGH:** exposed admin panels, default credentials hints, known CVEs on detected open ports, employee emails appearing in pastebin/dump-site dorks, takeover-vulnerable subdomains
 - 🟡 **MEDIUM:** outdated tech stack (EOL versions), suspicious subdomain naming (`admin-`, `dev-`, `staging-` exposed publicly), unusual cert history
 - 🟢 **LOW:** general infrastructure facts, public registrations, normal tech stack info
 
@@ -247,7 +250,7 @@ Priorities surface at the top of `osint-report.md`.
 - Wayback Machine API — no auth
 - Shodan InternetDB (`internetdb.shodan.io`) — public free endpoint, no auth, returns ports/CVEs/hostnames per IP
 - GitHub code search via public web (or via gh CLI if available)
-- HIBP Pwned Passwords (k-anonymity API) — free, no auth
+- HIBP **Pwned Passwords** (k-anonymity API) — free, no auth. Note: this endpoint **only checks password hashes**, it does **not** return breach data by email or domain. For email-leak coverage we use breach-leak dorks (see below), not HIBP.
 - Tavily — already used by other skills, pay-per-use
 - Firecrawl — already used by other skills, pay-per-use
 - Exa — already used by L2+, pay-per-use
@@ -265,7 +268,7 @@ Priorities surface at the top of `osint-report.md`.
 ### 6.3 Excluded from scope
 
 - Shodan paid Membership / API key — replaced by free InternetDB endpoint
-- HIBP API subscription — replaced by k-anon Pwned Passwords + GitHub leak dorks
+- HIBP **Breached Account** API ($3.95/mo subscription, paid endpoint that returns breaches per email/domain) — replaced by breach-leak dorks via Tavily (`site:pastebin.com`, `site:breached.cc`, `site:dehashed.com`, etc.) + GitHub code search for committed credentials. Coverage is shallower than the paid endpoint, but acceptable for the no-subscription constraint.
 - Hunter.io paid — free tier sufficient
 - IntelX, OSINT Industries, Maltego Hub — paid subscriptions, dropped
 - nmap, masscan, sqlmap — active scanning, out of ethical scope
@@ -404,10 +407,20 @@ Out of scope for v0.8.0. Existing research skills don't have CI either; testing 
 - Multi-entity tree exploration (one entity per invocation)
 - Active scanning, vulnerability exploitation, nmap-style probing
 - Darkweb crawling
-- Paid subscriptions (HIBP API monthly, IntelX paid, Shodan Membership)
+- Paid subscriptions (HIBP Breached Account API, IntelX paid, Shodan Membership, DeHashed, etc.)
 - Real-time monitoring or alerts
 - L0–L5 ladder for OSINT (one skill, no depth tiers)
 - Auto-detection that triggers OSINT inside existing research skills (separate path; user explicitly chooses `/osint-research`)
+
+### 10.2.1 Known coverage caveats
+
+Because we exclude paid subscriptions, certain OSINT sub-domains have **shallower** coverage than commercial OSINT tools:
+
+- **Email-in-breach lookup:** The free HIBP Pwned Passwords endpoint only checks password hashes, not email-to-breach mapping. We approximate with breach-leak dorks (Tavily queries against pastebin / breachforums-style sites) and GitHub code search. Coverage will miss breaches not indexed by Google/Tavily and breaches behind paywalls. For mission-critical breach lookups, the user should pair this skill with a paid HIBP API subscription externally.
+- **Person enrichment:** No paid people-search APIs (Pipl, Spokeo, OSINT Industries). Coverage limited to what's in LinkedIn dorks, GitHub commits, Wayback, and Perplexity context.
+- **Darkweb mentions:** Not in scope. Use IntelX or commercial darkweb monitoring externally if needed.
+
+These caveats are documented in `OSINT_INTEGRATION.md` so users have correct expectations.
 
 ### 10.3 Future (not committed)
 
