@@ -297,7 +297,7 @@ OSINT pipeline runs ~12 channels in parallel — fault tolerance is not optional
 - **theHarvester / subfinder not in PATH:** warning at start of report + install tip; do not fail.
 - **crt.sh timeout (common):** fallback to subfinder if available; otherwise skip subdomain enum and mark in report.
 - **DNS does not resolve:** entity is likely dead/parked; report still generated from channels that don't need DNS (Wayback, GitHub history, dorks).
-- **Channel returns malformed JSON:** log raw response in `sources.md`, mark channel ERRORED in status block, continue.
+- **Channel returns malformed JSON:** log **metadata only** in `sources.md` — channel name, timestamp, HTTP status, response size in bytes, parser error category. **Never** the raw response body (it may contain secrets, blocklisted URLs, or PII that bypass §13). Mark channel ERRORED in status block, continue.
 
 ### 7.3 Channel status block
 
@@ -440,6 +440,7 @@ These caveats are documented in `OSINT_INTEGRATION.md` so users have correct exp
 | Skill artifacts contain plaintext secrets and become a leak vector | Two-stage protection: hard redaction policy (§13.2) for known secret patterns + inline redactor on all ingested text (§13.4). Enforced at helper level, not by convention. Tests in `tests/security/` verify no plaintext secret ever lands in any artifact. |
 | Dorks query a blocklisted dump site directly | Outbound blocklist (§13.3.1) at helper level rejects the query before any API call. Verified by `tests/security/test_dorks_outbound_blocklist.sh`. |
 | Tavily/Firecrawl/Exa/Perplexity return results that **link to** blocklisted dump sites without us querying them directly | Inbound filter (§13.3.2) drops any result whose URL or content references a blocklisted host, before that data ever reaches an artifact. Filtering events logged to `sources.md`. Verified by `tests/security/test_inbound_filter.sh` and `tests/security/test_phase2_scrape_safety.sh`. |
+| Channel error / malformed response is logged raw, smuggling secrets or blocklisted URLs past the filter+redactor | §13.3.4 forbids raw channel bodies in any artifact. Only structured metadata (channel/status/size/category/timestamp) is recorded on errors. Optional `OSINT_DEBUG=1` writes to `/tmp/osint-debug-<slug>/` (outside project tree, still redacted). Verified by `tests/security/test_no_raw_response_logged.sh`. |
 | Channel APIs change format and break parsers | Each channel has its own bash helper isolated; failure of one channel does not break others (graceful degradation by design) |
 | Paid CLI tools not installed → poor results | Channel status block shows what ran and what didn't; install tips included in report; base functionality works without optional CLI |
 | Mermaid graph unreadable for large entities | Graph capped at top-N nodes by connectivity; full data always available in CSV artifacts |
@@ -460,11 +461,12 @@ This spec is complete when implementation can begin without further design quest
 5. Report includes channel status block per §7.3.
 6. **No artifact in `.firecrawl/osint/<slug>/` contains plaintext secrets** — verified by §13 redaction tests (`tests/security/test_no_plaintext_secrets.sh`), covering ingestion from all channels (GitHub, Wayback, Firecrawl, Tavily, Perplexity, etc.).
 7. **Two-level domain blocklist is enforced** — outbound (`test_dorks_outbound_blocklist.sh`) and inbound (`test_inbound_filter.sh`, `test_phase2_scrape_safety.sh`) tests pass; no blocklisted URL or scraped content lands in any artifact.
-8. `install.sh` deploys OSINT helpers and prints CLI install tips for missing optional tools.
-9. `docs/OSINT_INTEGRATION.md` exists and covers what's described in §9.3, including §13 Security & Privacy section.
-10. `README.md` lists `/osint-research` in a "Specialized skills" section, distinct from L0–L5 ladder.
-11. Plugin manifest bumped to `0.8.0`.
-12. CHANGELOG entry for `[0.8.0]` covers all the above.
+8. **No raw channel responses in artifacts** — `test_no_raw_response_logged.sh` passes; malformed and error responses produce only structured metadata in `sources.md`. Debug raw bodies (when `OSINT_DEBUG=1`) live in `/tmp/osint-debug-<slug>/`, redacted, never in the artifact directory.
+9. `install.sh` deploys OSINT helpers and prints CLI install tips for missing optional tools.
+10. `docs/OSINT_INTEGRATION.md` exists and covers what's described in §9.3, including §13 Security & Privacy section.
+11. `README.md` lists `/osint-research` in a "Specialized skills" section, distinct from L0–L5 ladder.
+12. Plugin manifest bumped to `0.8.0`.
+13. CHANGELOG entry for `[0.8.0]` covers all the above.
 
 ---
 
@@ -527,6 +529,19 @@ nulled.to, leakix.net, snusbase.com, weleakinfo.to
 
 The user can extend the blocklist via env var `OSINT_EXTRA_BLOCKLIST` (comma-separated). The user **cannot** disable or shrink the default list — it is hardcoded into `lib/inbound-filter.sh`.
 
+### 13.3.4 No raw channel responses in artifacts (ever)
+
+A subtle bypass of the blocklist + redactor is **logging raw channel output for debugging**. Malformed JSON, parser errors, rate-limit responses, unexpected payloads — the natural impulse is to dump the raw body to `sources.md` so the user can debug. **This must not happen.**
+
+The raw response may contain:
+- Secrets the redactor has not yet processed (the response failed to parse, so it never reached the redactor)
+- Blocklisted URLs that bypassed the inbound filter (filter operates on parsed result objects, not raw bodies)
+- PII the channel happened to include in error messages
+
+Therefore: **on any channel error or malformed response, only structured metadata is recorded** — channel name, HTTP status, response size in bytes, parser error category, timestamp. The raw body is dropped on the floor.
+
+If the user needs to debug a specific channel failure, they may set `OSINT_DEBUG=1`. With this flag, the raw response is written to `/tmp/osint-debug-<slug>/<channel>-<timestamp>.raw` (outside the project tree, never auto-synced anywhere) **after** passing through the secret-redactor and inbound-filter. The debug file path is reported in `sources.md` so the user can find it, but its contents never enter the artifact directory.
+
 ### 13.4 Inline secret redaction on ingestion
 
 Beyond the URL blocklist, every text body the skill ingests (Wayback snapshots, Firecrawl scrapes, GitHub code, Tavily content, Perplexity answers) is run through `lib/secret-redactor.sh` before being processed by Claude or written to artifacts. The redactor uses well-known regex patterns:
@@ -560,6 +575,7 @@ These constraints apply even though the ethical scope is Permissive. "Permissive
 - `tests/security/test_inbound_filter.sh` — feeds `lib/inbound-filter.sh` fixtures with: blocklisted domain in URL host, blocklisted domain in URL path, blocklisted domain mentioned in scraped content body. Asserts each is dropped, counter incremented, and `sources.md` records the filter event without content.
 - `tests/security/test_redaction_format.sh` — verifies redacted secrets follow the first-4 / last-4 convention exactly across all secret types in `secret-patterns.txt`.
 - `tests/security/test_phase2_scrape_safety.sh` — simulates Phase 2 picking a top-URL that resolves to a blocklisted domain → asserts Firecrawl call is **not** made and the URL is logged as filtered.
+- `tests/security/test_no_raw_response_logged.sh` — feeds channels with malformed JSON, HTTP 5xx, oversized payloads, and payloads containing seeded secrets and blocklisted URLs. Asserts that `sources.md` and every artifact contain **only** structured metadata (channel/status/size/category/timestamp) and zero bytes of the raw body. Verifies that with `OSINT_DEBUG=1`, raw response lands only in `/tmp/osint-debug-<slug>/`, is redacted, and the artifact directory is not modified.
 
 ### 13.7 Disclaimer expansion
 
