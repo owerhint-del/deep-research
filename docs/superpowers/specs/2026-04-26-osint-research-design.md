@@ -50,12 +50,10 @@ skills/osint-research/
 │   ├── crtsh.sh
 │   ├── wayback.sh
 │   ├── shodan-idb.sh
-│   ├── github-leaks.sh           # GitHub code search for leaked secrets/keys
+│   ├── github-leaks.sh           # GitHub code search; output is redacted (see §13)
 │   ├── theharvester-wrap.sh
 │   ├── subfinder-wrap.sh
-│   ├── dorks.sh                  # general Tavily/Firecrawl dorks
-│   ├── breach-leak-dorks.sh      # specialized dorks against pastebin/dump sites
-│   └── hibp-pwd.sh               # HIBP Pwned Passwords k-anon (password-only)
+│   └── dorks.sh                  # general Tavily/Firecrawl dorks; pastebin/dump sites blocklisted
 ├── templates/
 │   ├── osint-report.md.tpl     # hybrid report template
 │   └── graph.mmd.tpl           # mermaid graph template
@@ -73,7 +71,7 @@ skills/osint-research/
 ├── subdomains.csv
 ├── emails.csv
 ├── ips.csv
-├── leaks.md
+├── findings.md                 # CRITICAL/HIGH findings detail (metadata only, no plaintext secrets — see §13)
 ├── dorks-results.md
 ├── tech-stack.md
 └── sources.md                  # full audit trail (channel + timestamp per claim)
@@ -134,17 +132,15 @@ Classifier sits in `lib/entity-classifier.sh`. Type drives which channels run.
 | Shodan IDB | ✅ (resolve→IP) | ✅ | — | — | — |
 | theHarvester | ✅ | — | — | — | ✅ |
 | subfinder | ✅ | — | — | — | ✅ |
-| GitHub code search | ✅ | — | ✅ | ✅ | ✅ |
-| Breach-leak dorks (Tavily) | ✅ | — | ✅ | ✅ | ✅ |
-| HIBP Pwned Passwords (k-anon) | — | — | ⚠️ password-only | — | — |
-| Tavily Dorks (general) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| GitHub code search (with redaction) | ✅ | — | ✅ | ✅ | ✅ |
+| Tavily Dorks (general, no leak-site queries) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Firecrawl scrape | ✅ | — | — | ✅ | ✅ |
 | Exa neural | — | — | — | ✅ | ✅ |
 | Perplexity | — | — | — | ✅ | ✅ |
 
 ### 4.4 Phase composition
 
-**Phase 1 (parallel):** Whois, DNS, crt.sh, Wayback, GitHub code search, theHarvester, subfinder, Tavily general dorks, breach-leak dorks (specialized Tavily queries against pastebin/breachforums-style domains), HIBP Pwned Passwords (only when user explicitly provides a password to test, not as automatic email enrichment), Perplexity (when entity is person/company). All independent — no shared inputs.
+**Phase 1 (parallel):** Whois, DNS, crt.sh, Wayback, GitHub code search (with secret redaction, see §13), theHarvester, subfinder, Tavily general dorks, Perplexity (when entity is person/company). All independent — no shared inputs.
 
 **Phase 2 (depends on Phase 1):**
 - Shodan IDB queries — needs IPs from DNS resolve
@@ -157,8 +153,8 @@ Classifier sits in `lib/entity-classifier.sh`. Type drives which channels run.
 
 Each channel feeds raw data through `findings-extractor.sh`, which assigns priority by rules:
 
-- 🔴 **CRITICAL:** leaked credentials in public GitHub repos, exposed databases without auth (Shodan IDB shows open Redis/Mongo/Elasticsearch), private keys committed to public sources, plaintext credentials surfaced via breach-leak dorks
-- 🟠 **HIGH:** exposed admin panels, default credentials hints, known CVEs on detected open ports, employee emails appearing in pastebin/dump-site dorks, takeover-vulnerable subdomains
+- 🔴 **CRITICAL:** secrets detected in public GitHub repos (only metadata recorded — see §13 redaction policy), exposed databases without auth (Shodan IDB shows open Redis/Mongo/Elasticsearch), exposed admin panels with default-credential signatures
+- 🟠 **HIGH:** known CVEs on detected open ports, takeover-vulnerable subdomains, sensitive paths exposed (`/admin`, `/.git`, `/.env` accessible publicly)
 - 🟡 **MEDIUM:** outdated tech stack (EOL versions), suspicious subdomain naming (`admin-`, `dev-`, `staging-` exposed publicly), unusual cert history
 - 🟢 **LOW:** general infrastructure facts, public registrations, normal tech stack info
 
@@ -227,11 +223,12 @@ Priorities surface at the top of `osint-report.md`.
 
 ### 5.2 Format invariants
 
-1. **Disclaimer is non-removable** — injected by skill into every report, top of file.
+1. **Disclaimer is non-removable** — injected by skill into every report, top of file. Includes the §13.6 line about secret handling.
 2. **Findings come first** — the highest-value content is above the fold.
 3. **Cross-references** — every Findings line links to its detail anchor in the Dossier; every Dossier item links back to its Findings entry if any.
 4. **Audit trail completeness** — every factual claim in the report traces to at least one channel call with timestamp. No claim without a source.
 5. **Mermaid graph degradation** — for entities with > 30 nodes, graph shows top-N most-connected nodes plus a link to full CSV. Beyond that, mermaid becomes unreadable.
+6. **No plaintext secrets, ever** — see §13. Detected secrets are recorded as type + location + truncated match (first-4/last-4). Implementation must enforce this at helper level, not by Claude convention.
 
 ### 5.3 Why this format
 
@@ -250,7 +247,6 @@ Priorities surface at the top of `osint-report.md`.
 - Wayback Machine API — no auth
 - Shodan InternetDB (`internetdb.shodan.io`) — public free endpoint, no auth, returns ports/CVEs/hostnames per IP
 - GitHub code search via public web (or via gh CLI if available)
-- HIBP **Pwned Passwords** (k-anonymity API) — free, no auth. Note: this endpoint **only checks password hashes**, it does **not** return breach data by email or domain. For email-leak coverage we use breach-leak dorks (see below), not HIBP.
 - Tavily — already used by other skills, pay-per-use
 - Firecrawl — already used by other skills, pay-per-use
 - Exa — already used by L2+, pay-per-use
@@ -268,7 +264,8 @@ Priorities surface at the top of `osint-report.md`.
 ### 6.3 Excluded from scope
 
 - Shodan paid Membership / API key — replaced by free InternetDB endpoint
-- HIBP **Breached Account** API ($3.95/mo subscription, paid endpoint that returns breaches per email/domain) — replaced by breach-leak dorks via Tavily (`site:pastebin.com`, `site:breached.cc`, `site:dehashed.com`, etc.) + GitHub code search for committed credentials. Coverage is shallower than the paid endpoint, but acceptable for the no-subscription constraint.
+- HIBP entirely (both Pwned Passwords k-anon and paid Breached Account API) — out of scope. The free endpoint only checks password hashes, which is not a meaningful signal in entity-recon (we don't know the password). The paid endpoint is excluded by the no-subscription constraint. For email-in-breach coverage, this skill is shallower than commercial OSINT — see §10.2.1.
+- All breach-leak dump sites (pastebin.com, breached.cc, dehashed.com, raidforums archives, doxbin, etc.) — explicitly **blocklisted** in dorks. Reason: copying stolen data from these sources into local artifacts is both ethically problematic (re-distributing leaked PII) and legally risky in many jurisdictions, regardless of the report being for personal use. See §13 Security & Privacy.
 - Hunter.io paid — free tier sufficient
 - IntelX, OSINT Industries, Maltego Hub — paid subscriptions, dropped
 - nmap, masscan, sqlmap — active scanning, out of ethical scope
@@ -285,7 +282,7 @@ OSINT pipeline runs ~12 channels in parallel — fault tolerance is not optional
 | Tier | Channels | Behavior on failure |
 |---|---|---|
 | **Required** | Whois, DNS | Abort with clear error message. Without these, no useful report. |
-| **Recommended** | crt.sh, Wayback, Shodan IDB, GitHub code search, Tavily dorks, Perplexity, HIBP Pwned Pwds | Continue. Mark `SKIPPED: <reason>` in report. |
+| **Recommended** | crt.sh, Wayback, Shodan IDB, GitHub code search, Tavily dorks, Perplexity | Continue. Mark `SKIPPED: <reason>` in report. |
 | **Optional** | theHarvester, subfinder, amass, dnstwist, Hunter.io, gh CLI | Silent skip if missing. Add tip in report: "install `<tool>` for richer results". |
 
 ### 7.2 Specific failure modes
@@ -414,11 +411,12 @@ Out of scope for v0.8.0. Existing research skills don't have CI either; testing 
 
 ### 10.2.1 Known coverage caveats
 
-Because we exclude paid subscriptions, certain OSINT sub-domains have **shallower** coverage than commercial OSINT tools:
+Because we exclude paid subscriptions **and** explicitly avoid breach-leak dump sites for security/legal reasons (§13), several OSINT sub-domains have **shallower** coverage than commercial OSINT tools:
 
-- **Email-in-breach lookup:** The free HIBP Pwned Passwords endpoint only checks password hashes, not email-to-breach mapping. We approximate with breach-leak dorks (Tavily queries against pastebin / breachforums-style sites) and GitHub code search. Coverage will miss breaches not indexed by Google/Tavily and breaches behind paywalls. For mission-critical breach lookups, the user should pair this skill with a paid HIBP API subscription externally.
-- **Person enrichment:** No paid people-search APIs (Pipl, Spokeo, OSINT Industries). Coverage limited to what's in LinkedIn dorks, GitHub commits, Wayback, and Perplexity context.
-- **Darkweb mentions:** Not in scope. Use IntelX or commercial darkweb monitoring externally if needed.
+- **Email-in-breach lookup:** Out of scope. We do not query HIBP Breached Account API (paid), and we do not scrape pastebin/dump sites (excluded for ethical/legal reasons — see §13). The only signal we surface is when secrets are committed to **public GitHub repos** (with redaction). For comprehensive email-in-breach checks, users should pair this skill with HIBP's official UI on `haveibeenpwned.com` externally.
+- **Plaintext credential discovery:** Out of scope by policy. The skill detects that a secret was leaked (commit hash, file path, secret type) but **never** records the secret itself in artifacts.
+- **Person enrichment:** No paid people-search APIs (Pipl, Spokeo, OSINT Industries). Coverage limited to LinkedIn dorks, GitHub commits, Wayback, and Perplexity context.
+- **Darkweb mentions:** Out of scope. Use IntelX or commercial darkweb monitoring externally if needed.
 
 These caveats are documented in `OSINT_INTEGRATION.md` so users have correct expectations.
 
@@ -433,7 +431,9 @@ These caveats are documented in `OSINT_INTEGRATION.md` so users have correct exp
 
 | Risk | Mitigation |
 |---|---|
-| OSINT skill gets used for doxxing / harassment | Non-removable disclaimer in every report; README explicitly states "use at your own risk"; permissive scope is documented as a deliberate choice with user assuming responsibility |
+| OSINT skill gets used for doxxing / harassment | Non-removable disclaimer in every report; README explicitly states "use at your own risk"; permissive scope is documented as a deliberate choice with user assuming responsibility; PII aggregation rules in §13.4 prevent the worst patterns (no joining of name+email+address into profiles) |
+| Skill artifacts contain plaintext secrets and become a leak vector | Hard redaction policy (§13) enforced at helper level, not by convention. Tests in `tests/security/` verify no plaintext secret ever lands in any artifact. |
+| Dorks abuse breach-leak dump sites and pull stolen data into local files | Hardcoded blocklist (§13.3) at helper level, cannot be disabled by user. Verified by `tests/security/test_dorks_blocklist.sh`. |
 | Channel APIs change format and break parsers | Each channel has its own bash helper isolated; failure of one channel does not break others (graceful degradation by design) |
 | Paid CLI tools not installed → poor results | Channel status block shows what ran and what didn't; install tips included in report; base functionality works without optional CLI |
 | Mermaid graph unreadable for large entities | Graph capped at top-N nodes by connectivity; full data always available in CSV artifacts |
@@ -448,12 +448,80 @@ These caveats are documented in `OSINT_INTEGRATION.md` so users have correct exp
 This spec is complete when implementation can begin without further design questions. The following criteria define success for the v0.8.0 implementation:
 
 1. `/osint-research example.com` produces a complete `osint-report.md` in `.firecrawl/osint/<slug>/` with all required sections (Disclaimer, Findings Summary, Dossier, Graph, Raw Artifacts, Sources).
-2. All 12 channels listed in §4.3 have a working bash helper in `skills/osint-research/channels/`.
+2. All channels listed in §4.3 have a working bash helper in `skills/osint-research/channels/`.
 3. Entity classifier correctly identifies all 6 types from §4.2.
 4. Findings extractor assigns priorities according to §4.5 rules.
 5. Report includes channel status block per §7.3.
-6. `install.sh` deploys OSINT helpers and prints CLI install tips for missing optional tools.
-7. `docs/OSINT_INTEGRATION.md` exists and covers what's described in §9.3.
-8. `README.md` lists `/osint-research` in a "Specialized skills" section, distinct from L0–L5 ladder.
-9. Plugin manifest bumped to `0.8.0`.
-10. CHANGELOG entry for `[0.8.0]` covers all the above.
+6. **No artifact in `.firecrawl/osint/<slug>/` contains plaintext secrets** — verified by §13 redaction tests (`tests/security/test_no_plaintext_secrets.sh`).
+7. **Dorks blocklist is enforced** — Tavily/Firecrawl queries against blocklisted domains (§13.3) are rejected at helper level, verified by `tests/security/test_dorks_blocklist.sh`.
+8. `install.sh` deploys OSINT helpers and prints CLI install tips for missing optional tools.
+9. `docs/OSINT_INTEGRATION.md` exists and covers what's described in §9.3, including §13 Security & Privacy section.
+10. `README.md` lists `/osint-research` in a "Specialized skills" section, distinct from L0–L5 ladder.
+11. Plugin manifest bumped to `0.8.0`.
+12. CHANGELOG entry for `[0.8.0]` covers all the above.
+
+---
+
+## 13. Security & Privacy (secret-handling policy)
+
+This section is **load-bearing** — it defines the hard boundary on what the skill may and may not write to local artifacts. Implementation must match this exactly.
+
+### 13.1 Core principle
+
+The skill **discovers** the existence of leaked secrets but **never re-distributes them**. Existence + location = useful signal. Plaintext copy in a local file = liability and additional exposure.
+
+### 13.2 Redaction rules (mandatory)
+
+When a channel surfaces what looks like a secret (regex-detected patterns: API keys, private keys, tokens, passwords, AWS access keys, JWT, etc.):
+
+| Field | Recorded in artifact | Example |
+|---|---|---|
+| Type of secret | ✅ Yes | `aws_access_key_id`, `private_ssh_key`, `github_pat` |
+| Location | ✅ Yes | `github.com/example-corp/legacy@a1b2c3d, file: config/dev.env, line 14` |
+| Detection timestamp | ✅ Yes | `2026-04-26T14:32:11Z` |
+| Pattern match (truncated) | ⚠️ First 4 + last 4 chars only | `AKIA...XYZW` (never the full key) |
+| **Plaintext value** | ❌ **NEVER** | — |
+| **Surrounding code** | ❌ Never (could include other secrets / PII) | — |
+
+The first-4 / last-4 pattern is the **same** convention used by GitHub Secret Scanning UI and is sufficient for the user to verify which secret was found without the artifact itself becoming a leak.
+
+### 13.3 Dorks blocklist
+
+The general dorks helper (`channels/dorks.sh`) **must** reject queries containing any of the following domains as `site:` operators (case-insensitive). The list is enforced at helper level — not just by Claude convention — so misuse is impossible:
+
+```
+pastebin.com, paste.ee, ghostbin.com, hastebin.com,
+breached.cc, breachforums.is, raidforums.com, cracked.io,
+dehashed.com, leakcheck.io, intelx.io,
+doxbin.com, doxbin.org, doxbin.net,
+ddosecrets.com, distributeddenialofsecrets.com
+```
+
+Reason: copying content from these domains into local artifacts (or even fetching it through paid Tavily credits) constitutes redistribution of stolen / leaked PII. Even for personal use this is risky in most jurisdictions and ethically incompatible with the stated "Permissive" scope (which means "any legitimate public data", not "any data that ended up online").
+
+The user can extend the blocklist via env var `OSINT_EXTRA_BLOCKLIST` (comma-separated). The user **cannot** disable the default blocklist — it is hardcoded.
+
+### 13.4 PII handling
+
+Public personal data (names, public email addresses, public LinkedIn profiles) is **in scope** under the Permissive ethical decision (§2 row 6).
+
+But the skill must NOT:
+- Combine PII fields into "profiles" of private individuals (e.g. join a name + email + home address from leaked data into one record). Aggregation is what makes raw OSINT data dangerous.
+- Record home addresses, phone numbers, government IDs, financial data, or family relationships of named individuals — even if they appear in dork results.
+- Cache PII in the audit trail beyond what is in the report itself. `sources.md` cites channels and timestamps, not raw PII.
+
+These constraints apply even though the ethical scope is Permissive. "Permissive" means the user takes responsibility for use, not that the skill produces maximum-exposure artifacts.
+
+### 13.5 Verification (tests)
+
+- `tests/security/test_no_plaintext_secrets.sh` — runs the skill against fixtures known to contain regex-matchable secrets, then greps every artifact for plaintext patterns. Test fails if any plaintext secret appears in any output file.
+- `tests/security/test_dorks_blocklist.sh` — calls `dorks.sh` with each blocklisted domain as `site:` operator, asserts non-zero exit and no API call made.
+- `tests/security/test_redaction_format.sh` — verifies redacted secrets follow the first-4 / last-4 convention exactly.
+
+### 13.6 Disclaimer expansion
+
+The non-removable disclaimer (§5.2 invariant 1) must include a line about secret handling:
+
+> "When this report references leaked secrets, only their existence and location are recorded — never the secret value itself. To verify a finding, fetch the source location yourself with appropriate authorization."
+
+This sets correct expectations: the skill is a **detection tool**, not a credential exfiltration tool.
