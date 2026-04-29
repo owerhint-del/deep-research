@@ -4,15 +4,27 @@
 
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_DIR="$SCRIPT_DIR/../lib"
 
 # Reuse the same blocklist source as inbound-filter.
-BLOCKLIST="pastebin.com paste.ee ghostbin.com hastebin.com justpaste.it paste.org ix.io \
+DEFAULT_BLOCKLIST="pastebin.com paste.ee ghostbin.com hastebin.com justpaste.it paste.org ix.io \
 breached.cc breachforums.is breachforums.st raidforums.com cracked.io \
 dehashed.com leakcheck.io intelx.io leak-lookup.com \
 doxbin.com doxbin.org doxbin.net \
 ddosecrets.com distributeddenialofsecrets.com \
 nulled.to leakix.net snusbase.com weleakinfo.to"
+
+EXTRA="${OSINT_EXTRA_BLOCKLIST:-}"
+EXTRA="${EXTRA//,/ }"
+
+# Validate extra tokens (only hostname-shaped strings allowed); silently skip bad tokens.
+# Lowercase user-supplied tokens so OSINT_EXTRA_BLOCKLIST=Foo.com matches target foo.com.
+BLOCKLIST="$DEFAULT_BLOCKLIST"
+for h in $EXTRA; do
+    [ -z "$h" ] && continue
+    h=$(printf '%s' "$h" | tr '[:upper:]' '[:lower:]')
+    [[ "$h" =~ ^[a-zA-Z0-9.-]+$ ]] || continue
+    BLOCKLIST="$BLOCKLIST $h"
+done
 
 is_blocklisted() {
     local host="$1"
@@ -42,12 +54,26 @@ if [ -z "$ENTITY_TYPE" ] || [ -z "$TARGET" ]; then
     exit 1
 fi
 
-if is_blocklisted "$TARGET"; then
+# Reject targets/extra-sites containing characters that would break dork structure.
+# (Quote injection would let an attacker inject arbitrary search operators.)
+case "$TARGET" in
+    *\"*|*\\*|*$'\n'*) echo "dorks: --target contains forbidden character (quote/backslash/newline)" >&2; exit 1;;
+esac
+case "$EXTRA_SITE" in
+    *\"*|*\\*|*$'\n'*) echo "dorks: --extra-site contains forbidden character (quote/backslash/newline)" >&2; exit 1;;
+esac
+
+# Normalize for blocklist comparison (hostnames are case-insensitive).
+# Use tr for bash 3.2 compatibility (macOS ships bash 3.2).
+TARGET_LC=$(printf '%s' "$TARGET" | tr '[:upper:]' '[:lower:]')
+EXTRA_SITE_LC=$(printf '%s' "$EXTRA_SITE" | tr '[:upper:]' '[:lower:]')
+
+if is_blocklisted "$TARGET_LC"; then
     echo "dorks: target is blocklisted: $TARGET" >&2
     exit 2
 fi
 
-if [ -n "$EXTRA_SITE" ] && is_blocklisted "$EXTRA_SITE"; then
+if [ -n "$EXTRA_SITE" ] && is_blocklisted "$EXTRA_SITE_LC"; then
     echo "dorks: --extra-site is blocklisted: $EXTRA_SITE" >&2
     exit 2
 fi
