@@ -36,8 +36,13 @@ filtered=0
 while IFS= read -r line || [ -n "$line" ]; do
     [ -z "$line" ] && continue
 
-    url=$(printf '%s' "$line" | perl -ne 'print $1 if /"url"\s*:\s*"([^"]*)"/')
-    content=$(printf '%s' "$line" | perl -ne 'print $1 if /"content"\s*:\s*"([^"]*)"/')
+    # JSON string capture: account for backslash-escaped chars (e.g. \" \\ \/).
+    # Naive [^"]* stops at the first " — including ones the JSON producer
+    # escaped — so an attacker placing \" before a blocklisted host inside
+    # content would slip past the substring scan. (?:[^"\\]|\\.)* matches
+    # either a non-quote/non-backslash char OR any backslash-escape pair.
+    url=$(printf '%s' "$line" | perl -ne 'print $1 if /"url"\s*:\s*"((?:[^"\\]|\\.)*)"/')
+    content=$(printf '%s' "$line" | perl -ne 'print $1 if /"content"\s*:\s*"((?:[^"\\]|\\.)*)"/')
 
     host=$(printf '%s' "$url" | perl -ne 'if (m{^https?://([^/]+)}) { my $h = $1; $h =~ s/^[^@]*@//; print $h }')
 
