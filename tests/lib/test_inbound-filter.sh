@@ -143,4 +143,41 @@ assert_contains "$got" "example.com" "clean host with port passes through"
 got=$(printf '%s' '{"url":"https://notpastebin.com/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
 assert_contains "$got" "notpastebin.com" "host that only suffix-matches blocklisted is NOT blocked"
 
+# --- Fix #8 — RFC 3986 sub-delims in hostname must not bypass blocklist ---
+# urlparse preserves sub-delims (;,=$+!*()) inside hostname per spec.
+# Without the URL substring fallback, pastebin.com;params would yield
+# captured host "pastebin.com;params" which fails the (?:^|\.)host$ anchor.
+# The fallback content_re scan over the full URL string catches it via
+# word boundaries (\b).
+
+got=$(printf '%s' '{"url":"https://pastebin.com;params/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "host with semicolon (;) still blocked"
+
+got=$(printf '%s' '{"url":"https://pastebin.com,extra/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "host with comma (,) still blocked"
+
+got=$(printf '%s' '{"url":"https://pastebin.com=foo/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "host with equals (=) still blocked"
+
+got=$(printf '%s' '{"url":"https://pastebin.com$junk/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "host with dollar (\$) still blocked"
+
+got=$(printf '%s' '{"url":"https://pastebin.com;junk:443/y","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "host with semicolon and port still blocked"
+
+# --- Fix #9 — non-http schemes containing blocklisted host are blocked ---
+# extract_host returns '' for non-http(s). The URL substring fallback
+# catches blocklisted host appearing anywhere in the URL string.
+got=$(printf '%s' '{"url":"ftp://pastebin.com/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "ftp:// scheme with blocklisted host blocked"
+
+got=$(printf '%s' '{"url":"gopher://pastebin.com/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "gopher:// scheme with blocklisted host blocked"
+
+# --- Negative — substring without word boundary should NOT block ---
+# Word-boundary semantics: pastebin.commodity.com has no \b between m and
+# o (both word chars), so pastebin.com substring does NOT word-match.
+got=$(printf '%s' '{"url":"https://pastebin.commodity.com/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_contains "$got" "pastebin.commodity.com" "substring without \\b boundary is NOT blocked"
+
 assert_summary

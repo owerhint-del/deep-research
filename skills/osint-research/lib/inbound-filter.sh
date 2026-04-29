@@ -61,6 +61,11 @@ def extract_host(url):
     scheme. We additionally strip the optional trailing dot (FQDN root)
     so blocklisted-host suffix matching works against pastebin.com. as
     well as pastebin.com.
+
+    Note: urlparse preserves RFC 3986 sub-delims (;,=+!$*()) inside the
+    regname per spec. The host_re anchored match relies on the hostname
+    being clean LDH chars only; any sub-delim breaks the $ anchor. The
+    full-URL substring fallback below catches those cases.
     """
     if not isinstance(url, str) or not url:
         return ""
@@ -94,10 +99,21 @@ for raw in sys.stdin:
 
     blocked = False
 
+    # Primary check: clean hostname extracted by urlparse, matched against
+    # the suffix-anchored host_re (catches example.com and *.example.com).
     host = extract_host(url)
     if host and host_re.search(host):
         blocked = True
 
+    # Defense-in-depth: scan the full URL text for blocklisted host as a
+    # word-bounded substring. Catches messy hostnames urlparse preserves
+    # but where the $-anchor in host_re fails — e.g. pastebin.com;params,
+    # pastebin.com,foo — and non-http schemes (ftp://, gopher://) that
+    # extract_host filters out.
+    if not blocked and isinstance(url, str) and content_re.search(url):
+        blocked = True
+
+    # Content body scan for any blocklisted host reference.
     if not blocked and isinstance(content, str) and content_re.search(content):
         blocked = True
 
