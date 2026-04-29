@@ -43,6 +43,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 - New optional CLI dependencies (graceful skip if missing): theHarvester, subfinder, amass, dnstwist, gh.
 - New env var: `OSINT_EXTRA_BLOCKLIST` — comma-separated additional hosts to block (extends but cannot shrink the default list).
 
+### Testing
+
+Run the full suite manually before releasing:
+
+```
+for t in tests/lib/test_*.sh tests/channels/test_*.sh tests/security/test_*.sh tests/smoke/*.sh; do
+    bash "$t" || exit 1
+done
+```
+
+All tests must pass. CI integration is out of scope for v0.8.0.
+
 ---
 
 ## [0.7.0] — 2026-04-18
