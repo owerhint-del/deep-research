@@ -21,6 +21,30 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
+## [0.8.0] — 2026-04-26
+
+### Added
+
+- **`/osint-research` skill** — passive OSINT recon for a single entity (domain / IP / email / person / company / github user). Produces a hybrid report: findings summary → entity dossier → mermaid relationship graph → raw artifacts (CSVs) → audit trail. Lives parallel to L0–L5 research ladder (not part of it).
+- **8 channel helpers** (`skills/osint-research/channels/`): whois-dns, crt.sh, Wayback, Shodan InternetDB (free, no API key), GitHub code search, theHarvester wrapper, subfinder wrapper, dorks query builder.
+- **Two-level domain blocklist** for OSINT dump sites (pastebin, dehashed, breachforums, doxbin, ddosecrets, etc.). Enforced both outbound (rejects dork queries against blocklisted hosts) and inbound (drops any result URL or content body referencing a blocklisted host before disk write). Cannot be disabled by user.
+- **Inline secret redactor** for all ingested text — AWS keys, GitHub PATs, JWTs, private keys, Slack/Stripe/Twilio tokens, etc. Detected secrets recorded as `<first-4>...<last-4>` truncation, never plaintext.
+- **`docs/OSINT_INTEGRATION.md`** — user-facing documentation including channel inventory, security policy, and limitations.
+- **Security tests** (`tests/security/`): no plaintext secrets in artifacts, dorks outbound blocklist enforcement, inbound filter coverage, redaction format, Phase 2 scrape safety, no raw channel responses anywhere.
+
+### Security policy (deliberate exclusions)
+
+- HIBP API (both free Pwned Passwords and paid Breached Account) — out of scope. Free endpoint is meaningless in entity-recon (no password to test). Paid endpoint excluded by no-subscription constraint.
+- Breach-leak dump sites — explicitly blocklisted at outbound + inbound layers. Copying stolen data into local artifacts is ethically and legally risky regardless of personal use.
+- No `OSINT_DEBUG` flag — raw channel responses are never written anywhere on the filesystem, regardless of any env var. If a channel call fails, only structured metadata (channel/status/size/category/timestamp) is recorded; user reproduces with `curl` for debugging.
+
+### Tooling
+
+- New optional CLI dependencies (graceful skip if missing): theHarvester, subfinder, amass, dnstwist, gh.
+- New env var: `OSINT_EXTRA_BLOCKLIST` — comma-separated additional hosts to block (extends but cannot shrink the default list).
+
+---
+
 ## [0.7.0] — 2026-04-18
 
 ### Added
