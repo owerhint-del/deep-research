@@ -6,7 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
-## [Unreleased] — v0.8 (planned)
+## [Unreleased]
 
 ### Planned
 
