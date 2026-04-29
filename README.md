@@ -22,6 +22,12 @@ A set of six [Claude Code](https://claude.com/claude-code) skills that form a **
 | **L4** | `/academic-research` | ~40 min | 80–120 | ~5,000-word report with bibliography | Research-grade, scientific overviews |
 | **L5** | `/ultra-research` | 1+ hour | 150+ | Full knowledge vault (10,000+ words) | Become an expert on a topic |
 
+### Specialized skills (parallel to ladder)
+
+| Skill | Time | Sources | Output | Best for |
+|-------|:----:|:-------:|--------|----------|
+| `/osint-research` | ~10–15 min | 8–12 channels | hybrid findings/dossier/graph report | Entity recon: domain, IP, email, person, company. See `docs/OSINT_INTEGRATION.md`. |
+
 **Key property:** L3 calls L2 which calls L1. Every higher level inherits the foundation and adds its own layer (reflection, critic, multi-perspective, academic sources, recursive loops).
 
 ---

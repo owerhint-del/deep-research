@@ -105,7 +105,7 @@ fi
 # --- post-install check ---
 echo "Verifying..."
 all_ok=true
-for skill in quick-research research deep-research expert-research academic-research ultra-research; do
+for skill in quick-research research deep-research expert-research academic-research ultra-research osint-research; do
     if [ -f "$SKILLS_DST/$skill/SKILL.md" ]; then
         echo -e "  ${C_GREEN}✓${C_RESET} $skill"
     else
@@ -114,6 +114,27 @@ for skill in quick-research research deep-research expert-research academic-rese
     fi
 done
 
+echo ""
+
+# --- OSINT optional tools tip ---
+echo -e "${C_BOLD}OSINT optional tools${C_RESET} (improve coverage; skill works without them):"
+for tool in theHarvester subfinder amass dnstwist gh; do
+    if command -v "$tool" >/dev/null 2>&1; then
+        echo -e "  ${C_GREEN}✓${C_RESET} $tool found"
+    else
+        case "$tool" in
+            theHarvester) echo -e "  ${C_YELLOW}⚠${C_RESET} $tool: pipx install theHarvester";;
+            subfinder)    echo -e "  ${C_YELLOW}⚠${C_RESET} $tool: brew install subfinder";;
+            amass)        echo -e "  ${C_YELLOW}⚠${C_RESET} $tool: brew install amass";;
+            dnstwist)     echo -e "  ${C_YELLOW}⚠${C_RESET} $tool: pipx install dnstwist";;
+            gh)           echo -e "  ${C_YELLOW}⚠${C_RESET} $tool: brew install gh (improves GitHub code search rate limits)";;
+        esac
+    fi
+done
+
+if [ -z "${HUNTER_API_KEY:-}" ]; then
+    echo -e "  ${C_YELLOW}⚠${C_RESET} Hunter.io: optional. Free tier 25/mo at https://hunter.io — set HUNTER_API_KEY env var if desired."
+fi
 echo ""
 
 # --- next steps ---
