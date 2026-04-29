@@ -265,4 +265,28 @@ assert_contains "$got" "Xpastebin.comY" "alnum-bracketed substring is NOT blocke
 got=$(printf '%s' '{"url":"https://safe.com/api/pastebin","content":"y"}' | bash "$FILTER" 2>/dev/null)
 assert_contains "$got" "/api/pastebin" "path containing 'pastebin' (without .com) NOT blocked"
 
+# --- Fix #13 — embedded SUBDOMAINS of blocklisted hosts are blocked ---
+# The token boundary class needs to be asymmetric. Leading dot must be
+# allowed (so .pastebin.com matches via subdomain prefix), trailing dot
+# must NOT be allowed (so pastebin.com.au is still rejected as sibling
+# domain). Symmetric classes either over-block (.au) or under-block
+# (subdomain).
+
+got=$(printf '%s' '{"url":"https://safe.com/?u=https://archive.pastebin.com/leak","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "embedded subdomain (archive.pastebin.com) blocked"
+
+got=$(printf '%s' '{"url":"https://safe.com/?to=archive.dehashed.com","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "embedded subdomain of dehashed.com blocked"
+
+got=$(printf '%s' '{"url":"https://safe.com,https://x.y.pastebin.com/path","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "deeply-nested subdomain (x.y.pastebin.com) blocked"
+
+# Subdomain mention in content body
+got=$(printf '%s' '{"url":"https://safe.com/x","content":"see archive.pastebin.com for more"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "subdomain mention in content body blocked"
+
+# Asymmetry confirmed — pastebin.com.au still NOT blocked even with new boundaries
+got=$(printf '%s' '{"url":"https://safe.com/?ref=pastebin.com.au","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_contains "$got" "pastebin.com.au" "embedded sibling-TLD (pastebin.com.au) NOT blocked"
+
 assert_summary

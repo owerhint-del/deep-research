@@ -52,17 +52,26 @@ if not host_alt:
 
 host_re = re.compile(r"(?:^|\.)(?:" + host_alt + r")$", re.IGNORECASE)
 
-# Token boundary that excludes alphanumerics + RFC-unreserved hostname chars
-# (.,_,-). Used for both content body scanning and URL-string embedded-host
-# scanning. Differs from \b (which uses Python's \w that includes _ and
-# excludes .) so:
+# Token boundary for matching blocklisted hosts inside content text and
+# inside URL strings. Asymmetric: leading dot IS allowed (so subdomain
+# matches like archive.pastebin.com fire on the .pastebin.com suffix),
+# trailing dot is NOT allowed (so sibling domains like pastebin.com.au
+# do not match the pastebin.com prefix).
+#
+#   LEFT  exclusion: [a-zA-Z0-9_-]   (no .)
+#   RIGHT exclusion: [a-zA-Z0-9._-]
+#
+# Differs from \b (\w includes _ and excludes .) which has both
+# false-positive (pastebin.com.au) and false-negative (_pastebin.com_)
+# bugs. With the asymmetric class:
+#   * archive.pastebin.com  — preceded by ., followed by EOS/non-host → match (subdomain)
 #   * pastebin.com.au       — followed by . → no match (different domain)
-#   * _pastebin.com_evil    — surrounded by _ → no match (different host)
-#   * pastebin.commodity    — followed by m → no match (different host)
+#   * _pastebin.com_evil    — preceded by _ → no match (different host)
+#   * Xpastebin.com         — preceded by X (alnum) → no match
+#   * pastebin.commodity    — followed by m → no match
 #   * https://x?u=pastebin.com — preceded by =, followed by EOS → match
-#   * see pastebin.com here — preceded by space, followed by space → match
 HOSTNAME_TOKEN_RE = re.compile(
-    r"(?<![a-zA-Z0-9._-])(?:" + host_alt + r")(?![a-zA-Z0-9._-])",
+    r"(?<![a-zA-Z0-9_-])(?:" + host_alt + r")(?![a-zA-Z0-9._-])",
     re.IGNORECASE,
 )
 content_re = HOSTNAME_TOKEN_RE
