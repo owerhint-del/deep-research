@@ -168,9 +168,40 @@ done
 wait
 ```
 
-Feed the structured verdicts into the iteration's `peer-review-N.md` artifact. Claims
-verified `confirmed` with `confidence ≥ 0.7` are high-confidence; `disputed` claims are
-flagged for the iteration critic; `unclear` claims surface as open questions.
+Feed the structured verdicts into the iteration's `peer-review-N.md` artifact.
+
+> **Tavily output layout (CRITICAL).** Schema-defined fields land under `.content`,
+> not at top level. The actual `tavily-verify-N.json` shape is:
+>
+> ```json
+> {
+>   "content": {"verdict": "...", "confidence": 0.0, "evidence_urls": [...], "rationale": "..."},
+>   "sources": [{"url": "...", "title": "...", "favicon": "..."}, ...],
+>   "status": "completed", "request_id": "...", "response_time": 0.0, "created_at": "..."
+> }
+> ```
+>
+> Use `.content.verdict` / `.content.confidence` (NOT top-level — that's null).
+> In jq, `null < 0.6` is `true`, so naive `.confidence < 0.6` checks fire on every
+> malformed response. Always default with `// 0` or `// 1` and navigate via `.content.*`.
+
+Extract per-iteration verdict summary:
+
+```bash
+ITER_DIR=".firecrawl/research/$SLUG/L5/iterations/iter-$ITER"
+
+for f in "$ITER_DIR"/tavily-verify-*.json; do
+    [ -f "$f" ] || continue
+    VERDICT=$(jq -r '.content.verdict // "unknown"' "$f")
+    CONF=$(jq -r '.content.confidence // 0' "$f")
+    echo "$(basename "$f"): $VERDICT (conf=$CONF)"
+done
+```
+
+Classification rules used to feed `peer-review-N.md`:
+- `confirmed` with `.content.confidence ≥ 0.7` → high-confidence (no further action)
+- `disputed` → flagged for the iteration critic in next phase
+- `unclear` OR `confidence < 0.6` → surfaces as open question
 
 **Why both Codex AND Tavily Research?** They measure different things:
 - **Codex** = "what does a different model think about this?" (challenges Claude's reasoning)

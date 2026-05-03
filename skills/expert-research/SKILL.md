@@ -332,6 +332,43 @@ wait
 > skill falls back to manual fact-check only (the prose process below). The schema-based
 > verdict is preferred but not required for L3 to complete.
 
+**Tavily output layout (CRITICAL — determines all downstream parsing):**
+
+The schema-defined fields land under `.content`, not at the top level. The actual
+JSON Tavily writes:
+
+```json
+{
+  "content": {
+    "verdict": "confirmed",
+    "confidence": 0.92,
+    "evidence_urls": ["https://...", "https://..."],
+    "supporting_quotes": ["...", "..."],
+    "rationale": "..."
+  },
+  "sources": [
+    {"url": "https://...", "title": "...", "favicon": "..."},
+    ...
+  ],
+  "status": "completed",
+  "request_id": "...",
+  "response_time": 13.2,
+  "created_at": "..."
+}
+```
+
+`.content.*` = schema-typed verdict fields (this is what your skill reads).
+`.sources[]` = full provenance list of every URL Tavily looked at (a superset of
+`evidence_urls`, includes ones the model didn't ultimately cite).
+
+**Two pitfalls if you forget this layout:**
+
+1. `jq '.verdict'` returns `null` (it's at `.content.verdict`)
+2. In jq, `null < 0.6` evaluates to **true** — so a naive condition like
+   `.confidence < 0.6` would fire the tiebreaker on every claim, defeating the
+   "only-tiebreak-uncertain" optimization. Always navigate via `.content.*` and
+   protect against null with `// <default>`.
+
 **Codex tiebreaker.** When a Tavily verdict is `disputed` or `confidence < 0.6`, run a
 secondary Codex CLI verification on the same claim — second-model second opinion on
 already-uncertain claims, not on every claim (cost-efficient). `CODEX_HELPER` was
@@ -345,7 +382,17 @@ for N in 1 2 3 4 5; do
         continue
     fi
 
-    if jq -e '.confidence < 0.6 or .verdict == "disputed"' "$JSON_FILE" > /dev/null 2>&1; then
+    # Navigate to .content.* (NOT top-level). Default confidence to 1.0 when
+    # null/missing so a malformed-but-not-low-confidence response doesn't
+    # erroneously trigger the tiebreaker. Default verdict to "" so the
+    # equality check is meaningful (null == "disputed" is false in jq, but
+    # "" == "disputed" is also false — explicit is safer).
+    NEEDS_TIEBREAK=$(jq -r '
+        ((.content.confidence // 1) < 0.6) or
+        ((.content.verdict // "") == "disputed")
+    ' "$JSON_FILE")
+
+    if [ "$NEEDS_TIEBREAK" = "true" ]; then
         if [ -x "$CODEX_HELPER" ]; then
             bash "$CODEX_HELPER" 180 \
                 ".firecrawl/research/$SLUG/L3/codex-factcheck-$N.md" \
@@ -356,10 +403,33 @@ done
 wait
 ```
 
+**Extract verdict fields for the report.** Use these jq paths when synthesizing
+`L3/fact-check.md`:
+
+```bash
+# Per-claim verdict summary line:
+jq -r '
+  "Verdict: \(.content.verdict // "unknown") "
+  + "(confidence: \(.content.confidence // 0))"
+' ".firecrawl/research/$SLUG/L3/tavily-factcheck-$N.json"
+
+# Evidence URLs (from schema field — model-curated):
+jq -r '.content.evidence_urls[]?' ".firecrawl/research/$SLUG/L3/tavily-factcheck-$N.json"
+
+# Full source provenance (everything Tavily looked at — superset):
+jq -r '.sources[].url' ".firecrawl/research/$SLUG/L3/tavily-factcheck-$N.json"
+
+# Rationale text:
+jq -r '.content.rationale // "no rationale"' ".firecrawl/research/$SLUG/L3/tavily-factcheck-$N.json"
+```
+
 After all schema verdicts and Codex tiebreakers complete, manually review evidence URLs
 that aren't already in L1/L2/L3 sources — scrape them if they're load-bearing.
 
-Write `L3/fact-check.md` synthesizing the structured verdicts:
+Write `L3/fact-check.md` synthesizing the structured verdicts. For each claim N,
+read `L3/tavily-factcheck-N.json` via the jq paths shown above (always `.content.*`
+for verdict fields, never top-level), plus optional `L3/codex-factcheck-N.md` if the
+tiebreaker fired:
 
 ```markdown
 # Fact-check report
@@ -367,13 +437,18 @@ Write `L3/fact-check.md` synthesizing the structured verdicts:
 ## Claim 1: "X is 3x faster than Y"
 **Source in report:** [7]
 **Tavily verdict:** confirmed (confidence: 0.92)
-**Evidence URLs:**
-- [23] independent benchmark shows 2.8x
-- [25] community benchmark shows 3.1x
+  ← jq -r '.content.verdict, .content.confidence' tavily-factcheck-1.json
+**Evidence URLs (schema-curated by Tavily):**
+- https://benchmarks.example.com/x-vs-y — 2.8x
+- https://community.example.com/benchmarks-2026 — 3.1x
+  ← jq -r '.content.evidence_urls[]?' tavily-factcheck-1.json
+**Sources read (full provenance):** 4 URLs total
+  ← jq '.sources | length' tavily-factcheck-1.json
 
 **Rationale (Tavily):** Two independent benchmarks within the past 12 months both confirm
 the 3x range (2.8-3.1x), with consistent methodology.
-**Codex tiebreaker:** N/A (high-confidence Tavily verdict)
+  ← jq -r '.content.rationale // ""' tavily-factcheck-1.json
+**Codex tiebreaker:** N/A (high-confidence Tavily verdict — confidence ≥ 0.6, verdict ≠ disputed)
 **Final verdict:** CONFIRMED (High confidence)
 
 ## Claim 2: "X has poor ecosystem"
