@@ -1,7 +1,7 @@
 {
   "name": "deep-research",
-  "version": "0.8.0",
-  "description": "Claude Code research ladder: 6 composable skills (L0→L5) from 60s fact-check to 40-min academic investigation, plus /osint-research for entity discovery (domain/IP/email/person/company). Stack: Firecrawl + Tavily + Exa + Perplexity + optional Codex.",
+  "version": "0.9.0",
+  "description": "Claude Code research ladder: 6 composable skills (L0→L5) from 60s fact-check to 40-min academic investigation, plus /osint-research for entity discovery (domain/IP/email/person/company). Stack: Firecrawl + Tavily (search + research with --output-schema verdicts) + Exa + optional Codex CLI cross-model channel.",
   "author": {
     "name": "hint-shu",
     "url": "https://github.com/hint-shu"

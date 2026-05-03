@@ -120,6 +120,46 @@ Save each response to `.firecrawl/research/$SLUG/L4/exa-academic-<subq-num>.json
 
 **If Exa unavailable:** skill falls back to pre-v0.5 behavior (Tavily + manual arXiv scraping via Firecrawl) — everything still works, just less academic coverage per time-budget.
 
+## Stage 1c: Firecrawl academic categories (complementary, v0.9.0+)
+
+> Always run this in parallel with Exa — they index different academic surfaces. Cost is low (search-only, no per-page agent fee).
+
+In addition to Exa's `category: "research paper"`, Firecrawl supports `--categories research,pdf` which routes results through arXiv/Nature/IEEE/PubMed. Run the same academic sub-questions through Firecrawl to widen coverage:
+
+```bash
+# For each academic sub-question
+firecrawl search "<academic sub-question>" \
+  --limit 10 \
+  --categories research,pdf \
+  --scrape --scrape-formats markdown,summary \
+  --only-main-content \
+  --json -o .firecrawl/research/$SLUG/L4/firecrawl-academic-<subq-num>.json
+```
+
+**Quality grading:** Firecrawl `categories: research,pdf` results qualify as **Quality A** in the bibliography (peer-reviewed or preprint-server-hosted) — same rule as Exa results.
+
+**Coverage check.** After both Exa and Firecrawl academic searches complete, deduplicate by URL. URLs found by **both** providers are highest-confidence picks; URLs in only one are still valid but flag the provider source in the bibliography contribution note.
+
+## Stage 1d: Tavily Research --model pro (synthesis backup, v0.9.0+)
+
+> Optional — adds a synthesized cited summary per academic sub-question. Skip if `DEEP_RESEARCH_DISABLE_TAVILY_RESEARCH=1`.
+
+Tavily Research with `--model pro` runs multi-agent academic synthesis. For each of the 4 academic sub-questions, kick off a Tavily Research job in parallel with the multi-agent crew (Stage 2):
+
+```bash
+for N in 1 2 3 4; do
+    tvly research "<academic sub-question $N>" \
+      --model pro \
+      --citation-format numbered \
+      -o ".firecrawl/research/$SLUG/L4/tavily-research-academic-$N.md" &
+done
+wait
+```
+
+The output (cited markdown synthesis) provides a **second independent academic angle** to compare against Researcher A (Claude general) and Researcher B (Claude cross-domain). Cross-checking 3 perspectives (Tavily Research / Researcher A / Researcher B) is stronger than 2.
+
+**If Tavily Research unavailable:** skip this stage. Crew runs as 2-researcher (or 3 with Codex from Stage 1a).
+
 ## Stage 1a: Codex as Researcher C (optional, added v0.2)
 
 > Fault-tolerant — if Codex is unavailable, the crew runs with 2 researchers instead of 3. Skill continues.

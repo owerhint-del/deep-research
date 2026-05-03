@@ -71,6 +71,46 @@ _check_source_size() {
     return 0
 }
 
+# Log which optional cross-channel artifacts (Codex / Tavily Research / Exa) are
+# present in a tier directory. Informational only — never blocks. Helps users see
+# at a glance which independent verification channels actually ran.
+#
+# v0.9.0: Tavily Research replaces the v0.6.0 Perplexity Answer Channel.
+_log_optional_channels() {
+    local dir="$1"
+    local tier_label="${2:-tier}"
+    local found=()
+
+    # Codex cross-model channel (codex-*.md outputs; .status sidecars don't match this glob)
+    if compgen -G "$dir/codex-*.md" > /dev/null 2>&1; then
+        local codex_count
+        codex_count=$(ls "$dir"/codex-*.md 2>/dev/null | wc -l | tr -d ' ')
+        found+=("codex×${codex_count}")
+    fi
+
+    # Tavily Research answer channel / fact-check (v0.9.0+)
+    if compgen -G "$dir/tavily-research-*" > /dev/null 2>&1 \
+        || compgen -G "$dir/tavily-factcheck-*.json" > /dev/null 2>&1 \
+        || compgen -G "$dir/tavily-verify-*.json" > /dev/null 2>&1; then
+        local tvr_count
+        tvr_count=$(ls "$dir"/tavily-research-* "$dir"/tavily-factcheck-*.json "$dir"/tavily-verify-*.json 2>/dev/null | wc -l | tr -d ' ')
+        found+=("tavily-research×${tvr_count}")
+    fi
+
+    # Exa neural channel
+    if compgen -G "$dir/exa-*.json" > /dev/null 2>&1; then
+        local exa_count
+        exa_count=$(ls "$dir"/exa-*.json 2>/dev/null | wc -l | tr -d ' ')
+        found+=("exa×${exa_count}")
+    fi
+
+    if [ ${#found[@]} -gt 0 ]; then
+        echo "ℹ️  $tier_label optional channels: ${found[*]}"
+    else
+        echo "ℹ️  $tier_label optional channels: none active (single-channel run)"
+    fi
+}
+
 # --- L1 verification ---------------------------------------------------
 
 verify_l1() {
@@ -186,6 +226,7 @@ verify_l2_checkpoint_4() {
     _verify_citations "$dir/report.md" "$dir/bibliography.md" || return 1
 
     echo "✅ CHECKPOINT 4 PASSED: ${words}-word report, bibliography verified, all citations traceable"
+    _log_optional_channels "$dir" "L2"
     return 0
 }
 
@@ -228,6 +269,7 @@ verify_l3() {
     _verify_citations "$dir/report.md" "$dir/bibliography.md" || return 1
 
     echo "✅ L3 FINAL CHECKPOINT PASSED: ${words}-word report, $l3_sum_count L3 sources, critic + fact-check verified, citations traceable"
+    _log_optional_channels "$dir" "L3"
     return 0
 }
 

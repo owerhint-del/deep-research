@@ -5,14 +5,14 @@
     "url": "https://github.com/hint-shu"
   },
   "metadata": {
-    "description": "Systematic research ladder for Claude Code (L0→L5) — Firecrawl + Tavily + optional Codex cross-model channel.",
-    "version": "0.7.0"
+    "description": "Systematic research ladder for Claude Code (L0→L5) — Firecrawl + Tavily (search + research with --output-schema) + Exa + optional Codex CLI cross-model channel. Plus /osint-research for entity recon.",
+    "version": "0.9.0"
   },
   "plugins": [
     {
       "name": "deep-research",
-      "description": "Six composable research skills: /quick-research (L0, ~1 min), /research (L1, ~5 min), /deep-research (L2, ~12 min, 4 verification checkpoints), /expert-research (L3, ~20 min, critic agent + fact-check), /academic-research (L4, ~40 min, arXiv + full agent crew), /ultra-research (L5, 1+ hour, full knowledge vault). Each tier composes on the previous one. Includes shared verification library for audit-trail integrity.",
-      "version": "0.7.0",
+      "description": "Six composable research skills: /quick-research (L0, ~10-15 sec, Fireplexity-pattern), /research (L1, ~5 min, search-with-scrape one-shot), /deep-research (L2, ~12 min, 4 verification checkpoints + Tavily Research Answer Channel), /expert-research (L3, ~20 min, schema-based fact-check via Tavily Research --output-schema), /academic-research (L4, ~40 min, arXiv + full agent crew + FC categories:research), /ultra-research (L5, 1+ hour, full knowledge vault). Plus /osint-research (entity recon). Each tier composes on the previous one. Includes shared verification library for audit-trail integrity.",
+      "version": "0.9.0",
       "author": {
         "name": "hint-shu"
       },
