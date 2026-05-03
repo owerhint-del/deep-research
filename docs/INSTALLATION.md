@@ -119,20 +119,36 @@ claude mcp add --transport http exa \
 
 Full integration guide: [docs/EXA_INTEGRATION.md](EXA_INTEGRATION.md).
 
-### 4. (Optional) Install Perplexity MCP — answer-engine channel (v0.6.0+)
+### 4. Install Tavily CLI — answer-engine channel (v0.9.0+, replaces Perplexity)
 
-Adds a fourth research tool category — **answer engine** that returns synthesized answers with citations, not just URLs. Kills L0 fact-check latency (one call vs search+scrape+synthesize).
+Adds a research-grade **answer engine** via the Tavily Research API. Returns synthesized answers with citations and supports `--output-schema` for structured verdicts (used in L3 fact-check). This replaces the v0.6.0–v0.8.0 Perplexity integration entirely.
 
-1. Sign up at [perplexity.ai](https://perplexity.ai/settings/api), get API key
-2. Install the official MCP server:
+1. Sign up at [tavily.com](https://app.tavily.com), get API key (free tier: 1,000 searches/mo)
+2. Install the Tavily CLI:
 
 ```bash
-claude mcp add perplexity-ask -e "PERPLEXITY_API_KEY=pplx-YOUR_KEY" -- npx -y server-perplexity-ask
+curl -fsSL https://cli.tavily.com/install.sh | bash
 ```
 
-3. Restart Claude Code. Verify: `claude mcp list | grep perplexity` should show `✓ Connected`.
+3. Authenticate (will open a browser for OAuth or prompt for an API key):
 
-Full integration guide: [docs/PERPLEXITY_INTEGRATION.md](PERPLEXITY_INTEGRATION.md).
+```bash
+tvly login
+```
+
+You can verify auth status anytime with `tvly auth`.
+
+4. (Optional but recommended) Install the official Tavily Skill set so Claude Code can auto-invoke `tavily-research`, `tavily-search`, `tavily-extract`, `tavily-map`, `tavily-crawl`:
+
+```bash
+npx skills add tavily-ai/skills --all
+```
+
+5. Verify: `tvly research "test query" --model mini` should produce a cited markdown report in 30-120 sec.
+
+> **Migrating from v0.6.0–v0.8.0 (Perplexity)?** Remove the old MCP server: `claude mcp remove perplexity-ask`. The Perplexity API subscription can be cancelled. See [CHANGELOG.md](../CHANGELOG.md) for the full v0.9.0 migration guide.
+
+Historical reference: [docs/PERPLEXITY_INTEGRATION.md](PERPLEXITY_INTEGRATION.md) (deprecated).
 
 ### 5. (Optional) Install OpenAI Codex CLI
 

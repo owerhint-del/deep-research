@@ -1,6 +1,6 @@
 ---
 name: osint-research
-description: OSINT recon skill — passive entity discovery for domain / IP / email / person / company / github user. Builds a hybrid findings/dossier/graph report from free public sources (Whois, DNS, crt.sh, Wayback, Shodan InternetDB, GitHub code search, Tavily/Firecrawl/Exa/Perplexity dorks, optional theHarvester/subfinder). No subscription dependencies. Disclaimer is non-removable; secrets are redacted; blocklisted dump sites are filtered at outbound and inbound levels.
+description: OSINT recon skill — passive entity discovery for domain / IP / email / person / company / github user. Builds a hybrid findings/dossier/graph report from free public sources (Whois, DNS, crt.sh, Wayback, Shodan InternetDB, GitHub code search, Tavily/Firecrawl/Exa dorks + Tavily Research for context enrichment, optional theHarvester/subfinder). No subscription dependencies. Disclaimer is non-removable; secrets are redacted; blocklisted dump sites are filtered at outbound and inbound levels.
 user_invocable: true
 ---
 
@@ -25,7 +25,7 @@ Goal: hybrid OSINT report (findings → dossier → mermaid graph → raw artifa
 ## Budget
 
 - Time: ~10–15 min
-- Credits: ~30–50 across Tavily/Firecrawl/Exa/Perplexity (comparable to L2)
+- Credits: ~30–50 across Tavily (search + research) / Firecrawl / Exa (comparable to L2)
 - Money: $0/mo guaranteed (no subscriptions)
 
 ## Hard Security Rules (do NOT bypass)
@@ -68,7 +68,7 @@ If any rule conflicts with what you think the user wants — stop and ask. Defau
    - **Tavily** — for dork queries from `dorks.sh`. Pipe each result body through `inbound-filter.sh` and `secret-redactor.sh` before persisting.
    - **Firecrawl** — for top-N URLs from Tavily. **Before scraping**, pass the URL through `inbound-filter.sh` (single-line NDJSON form). If filter drops it, do not scrape.
    - **Exa** — for related entities (person/company only).
-   - **Perplexity** — for context enrichment (person/company only).
+   - **Tavily Research** (`tvly research --model mini`) — for context enrichment (person/company only). Pipe its cited markdown output through `inbound-filter.sh` and `secret-redactor.sh` before persisting. Replaces v0.6.0–v0.8.0 Perplexity context channel.
 
 4. **Phase 2 dependent channels:**
    - For each IP from `whois-dns` DNS resolves → `shodan-idb.sh`.
@@ -93,9 +93,9 @@ If any rule conflicts with what you think the user wants — stop and ask. Defau
 ## Error Handling
 
 - **Required channels** (whois, dns) failure → abort with clear message.
-- **Recommended channels** (crt.sh, Wayback, Shodan-IDB, GitHub, Tavily dorks, Perplexity) failure → mark SKIPPED, continue.
+- **Recommended channels** (crt.sh, Wayback, Shodan-IDB, GitHub, Tavily dorks, Tavily Research) failure → mark SKIPPED, continue.
 - **Optional channels** (theHarvester, subfinder) missing → silent skip with install tip.
-- **Tavily/Firecrawl/Exa/Perplexity rate limit** → exponential backoff x3, then PARTIAL.
+- **Tavily/Firecrawl/Exa rate limit** → exponential backoff x3, then PARTIAL.
 - **Malformed channel response** → log only structured metadata (channel/status/size/category/timestamp) to `sources.md`. **Never** write raw body anywhere.
 
 ## Output Format

@@ -12,12 +12,69 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 - Full Russian translation of ARCHITECTURE and TROUBLESHOOTING
 - Real-world L5 validation run (end-to-end full-stack test)
-- Marketing: HN/Reddit/Twitter distribution
+- v1.0: Multi-LLM triangulation (Codex + Kimi + Claude consensus voting at L3+) — see consensus debate in v0.9.0 release notes
+- v1.x: FC `/agent` (FIRE-1) autonomous research channel for L3+ with budget caps and evidence-first verdict logic
 
 ### Explicitly dropped from roadmap
 
 - ~~MCP-based Codex integration~~ — aesthetic refactor without user value. Helper works, proven in v0.2.2 tests. Wrapping it as MCP wouldn't remove the onboarding friction (user still needs `brew install codex + codex auth login`). Would add ~500 lines of Node.js to maintain for zero functional improvement.
 - ~~Streaming Codex output~~ — 1-2 min L3 latency improvement isn't worth the complexity. L3 target is ~20 min, current actual is ~18-22 min — we're already within target. Optimization for optimization's sake.
+
+---
+
+## [0.9.0] — 2026-05-03
+
+**Breaking change release.** Removes Perplexity dependency, modernizes search and fact-check around the Firecrawl × Tavily provider matrix.
+
+### Removed (BREAKING)
+
+- **Perplexity MCP integration** — entirely removed from L0/L2/L3/L5 skills. The `mcp__perplexity-ask__perplexity_ask` tool is no longer referenced anywhere. The `DEEP_RESEARCH_DISABLE_PERPLEXITY` env flag is obsolete (no-op).
+- L0 `quick-research` no longer has a Perplexity fast path. The Perplexity-pre-v0.6.0 fallback path (search → scrape → answer) was also removed and replaced with the Fireplexity-pattern.
+- L2 `deep-research` Step 2.3a-pplx is replaced by Step 2.3a-tvr (Tavily Research Answer Channel).
+- L3 `expert-research` Step 2.4 is now schema-based (Tavily Research `--output-schema`) instead of free-form Perplexity Q&A.
+- L5 `ultra-research` per-iteration "Perplexity Fact-Verifier" section replaced with "Tavily Research Fact-Verifier".
+
+### Added
+
+- **L0 Fireplexity-pattern** (`quick-research/SKILL.md`). Replaces the 3-step search→scrape→answer flow with a single `firecrawl search "<query>" --scrape --scrape-formats markdown,summary --limit 5` call (returns clean markdown + AI-summary per result in one round) running in parallel with `mcp__tavily__tavily_search` for diversity. Total wall time ~10-15 sec — same envelope as the old Perplexity fast path, no external dependency.
+- **Search-with-scrape one-shot** in L1 `research/SKILL.md`. Step 3 SEARCH now uses `--scrape --scrape-formats markdown,summary` so the search response includes full markdown and an AI-generated summary per result. Step 4 READ extracts these from the search JSON via `jq` instead of issuing a second scrape round (most picks are already scraped). Falls back to `firecrawl scrape` for picks that need it (e.g. Tavily-only picks, or where Step 3's scrape was insufficient).
+- **`tavily extract --query`** as an optional alternative in L1 Step 4 — returns query-focused chunks per URL instead of full page content. Cheaper context for huge doc pages.
+- **Tavily Research Answer Channel (Step 2.3a-tvr)** in L2 `deep-research/SKILL.md`. Runs `tvly research --model auto --citation-format numbered -o L2/tavily-research-gap.md` in parallel with Firecrawl scrapes — same role and output shape as the v0.6.0 Perplexity Answer Channel.
+- **Channel attribution tags** in L2 contradictions/synthesis: `(cross-model)` for Codex, `(answer-channel)` for Tavily Research, `(neural)` for Exa. A claim with two or more such tags is high-confidence triangulated.
+- **Schema-based fact-check** in L3 `expert-research/SKILL.md` Step 2.4. Each critical claim verified through `tvly research --model mini --output-schema "{verdict, confidence, evidence_urls, supporting_quotes, rationale}"`. Output is structured JSON, not free-form text — verdict shape is enforced by the schema.
+- **Codex tiebreaker** in L3 fact-check: when Tavily verdict is `disputed` or `confidence < 0.6`, the skill auto-runs a Codex CLI verification on the same claim. Cost-efficient (only fires on already-uncertain claims).
+- **Firecrawl `--categories research,pdf`** in L3 (Step 2.2 neutral-angle search) and L4 (new Stage 1c). Routes results through arXiv/Nature/IEEE/PubMed. Auto-grades as Quality A in L4 bibliography. Complements Exa's `category: "research paper"` — different surfaces, broader coverage.
+- **Tavily map+extract pattern** in L3 Step 2.2 for known authoritative domains. `tvly map "https://arxiv.org" --instructions "..."` then `tvly extract <urls> --query "<aspect>"` is more targeted and cheaper than broad search.
+- **Tavily Research --model pro** as L4 Stage 1d (synthesis backup). Adds a third independent academic angle (cited synthesis) per academic sub-question, alongside Researcher A (Claude general) and Researcher B (Claude cross-domain).
+- **Tavily Research per-iteration verifier** in L5 `ultra-research/SKILL.md`. Replaces the Perplexity verifier section. Same schema as L3 fact-check (verdict + confidence + evidence_urls + rationale). Runs in parallel with Codex verifier — they measure different things (Codex: model disagreement; Tavily Research: web-source citation grounding).
+- **Optional channels logging** in `scripts/lib/verify-research.sh`. New `_log_optional_channels` helper detects Codex / Tavily Research / Exa artifacts in a tier directory and reports their counts after PASSED checkpoints. Informational only — never blocks. Helps users see at a glance which independent verification channels actually ran.
+
+### Env vars
+
+- **Removed:** `DEEP_RESEARCH_DISABLE_PERPLEXITY` (no-op now — Perplexity is gone)
+- **Added:** `DEEP_RESEARCH_DISABLE_TAVILY_RESEARCH=1` — disables Tavily Research as Answer Channel (L2) / fact-check engine (L3) / per-iteration verifier (L5). Falls back to manual fact-check or Codex-only paths where applicable.
+
+### Tooling assumptions
+
+- The Tavily CLI (`tvly` binary) must be installed and authed for v0.9.0 fact-check / Answer Channel paths. Install: `curl -fsSL https://cli.tavily.com/install.sh | bash`. The `tavily-research` Skill (auto-discovered via `npx skills add tavily-ai/skills --all`) is functionally equivalent.
+- Firecrawl CLI must support `--scrape --scrape-formats markdown,summary` (Firecrawl v1.12+).
+
+### Verification
+
+- `verify_l1`, `verify_l2_checkpoint_{1..4}`, `verify_l3` all pass on the flagship example `firecrawl-vs-tavily-2026` after migration.
+- New `_log_optional_channels` correctly reports `none active (single-channel run)` on the legacy flagship example (which predates any optional channel artifacts).
+
+### Architectural rationale
+
+This release implements only **Phase A** of the broader v1.0 redesign discussed in the consensus debate (Codex + Kimi reviewed both the original and revised proposals). Phase A: replace Perplexity with Tavily Research, modernize Firecrawl × Tavily usage. Phase B (Multi-LLM triangulation: Codex + Kimi + Claude consensus voting at L3+) is deferred to v1.0 with evidence-first verdict logic — Codex's review explicitly recommended against majority-voting LLMs as fact-check primitives ("3 LLM согласны ≠ истина") and called for an evidence-pack-first approach. v0.9.0 keeps the safer single-channel-per-tier model with Codex tiebreakers, while the schema-based verdict shape lays the groundwork for v1.0's evidence-pack rubric.
+
+### Migration guide
+
+- If you set `DEEP_RESEARCH_DISABLE_PERPLEXITY=1` — remove it from your shell rc / env files. No replacement needed (Perplexity is gone unconditionally).
+- If you have an `mcp__perplexity-ask__*` MCP server installed — it can be removed (`claude mcp remove perplexity-ask`). The skills no longer reference it.
+- If you previously paid for Perplexity API credits — you can cancel; v0.9.0 does not use them.
+- If you rely on the `tavily-research` Skill (global `~/.claude/skills/`) — confirm it's installed (`Skill: tavily-research` should be discoverable). Otherwise install via `curl -fsSL https://cli.tavily.com/install.sh | bash` then `npx skills add tavily-ai/skills --all`.
+- Existing `.firecrawl/research/<slug>/` artifacts from v0.8.0 and earlier remain valid — verification still passes on them (just without optional channel logging metadata).
 
 ---
 

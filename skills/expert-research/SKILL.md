@@ -175,6 +175,31 @@ Write `L3/perspective-plan.md`:
 
 Run 9 searches in parallel (3 queries × 3 angles) using Firecrawl + Tavily.
 
+**v0.9.0 — academic-angle augmentations.** For the **neutral angle** queries, also run:
+
+- **Firecrawl with academic categories** to surface arXiv/Nature/IEEE/PubMed:
+  ```bash
+  firecrawl search "<neutral angle query>" \
+    --limit 8 \
+    --categories research,pdf \
+    --scrape --scrape-formats markdown,summary \
+    --json -o .firecrawl/research/$SLUG/L3/search-neutral-academic.json
+  ```
+- **Tavily map+extract pattern** for known authoritative domains (cheaper and more
+  targeted than broad search):
+  ```bash
+  # Map first to find relevant pages
+  tvly map "https://arxiv.org" \
+    --instructions "Find recent papers on <topic>" \
+    --json -o .firecrawl/research/$SLUG/L3/tavily-map-arxiv.json
+
+  # Then extract with query focus on the matching URLs
+  tvly extract "<picked-url-1>" "<picked-url-2>" \
+    --query "<specific aspect of the claim>" \
+    --chunks-per-source 3 --json \
+    -o .firecrawl/research/$SLUG/L3/tavily-extract-arxiv.json
+  ```
+
 **v0.5.0:** If Exa MCP is installed (check for `mcp__exa__*` tools availability), run additional Exa searches in parallel. Exa's neural ranking **excels at the critic and neutral angles** — it finds conceptually-related dissenting views that keyword search misses.
 
 ```
@@ -208,53 +233,168 @@ Pick top 10–15 NEW sources across 3 angles. Scrape + summarize using same `.su
 
 Save to `L3/sources/` starting from the next available number.
 
-### Step 2.4: FACT-CHECK CRITICAL CLAIMS
+### Step 2.4: FACT-CHECK CRITICAL CLAIMS (schema-based)
 
-**v0.6.0+: use Perplexity for fact-checks.** Perplexity is purpose-built for citation-grounded Q&A — cheaper and more focused than invoking Codex for verification of 5 short claims.
+**v0.9.0+: schema-based fact-check via Tavily Research.** Each critical claim is verified
+through Tavily Research's `--output-schema` flag — the result is a **structured JSON
+verdict** (verdict + evidence_urls + confidence + rationale), not free-form text. This is
+the Perplexity replacement and is **stronger** than the prior approach because the verdict
+shape is enforced — no parsing free text or hoping the answer mentioned a verdict word.
 
+Read L2/report.md + L3 new summaries. Identify the **top 5 most critical claims** — ones
+that would change the recommendation if wrong.
+
+For each claim, run Tavily Research with a fact-check schema. **Important:**
+`tvly research --output-schema` expects a **PATH to a JSON file**, not inline JSON —
+write the schema once to a temp file and reuse it across all 5 claims.
+
+Set up shared CODEX_HELPER and SCHEMA_FILE up-front (used by both fact-check and
+Codex tiebreaker below):
+
+```bash
+SLUG="<slug>"
+
+# Codex helper path (used by tiebreaker logic at the end of this step)
+CODEX_HELPER="$HOME/.claude/scripts/codex-research.sh"
+[ -x "$CODEX_HELPER" ] || CODEX_HELPER="scripts/codex-research.sh"
+
+# Tavily Research schema file (PATH-based, not inline)
+SCHEMA_FILE=$(mktemp -t tvly-factcheck-schema.XXXXXX.json)
+trap 'rm -f "$SCHEMA_FILE"' EXIT
+
+cat > "$SCHEMA_FILE" <<'JSON'
+{
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": ["confirmed", "disputed", "unclear"],
+      "description": "confirmed if 2+ independent sources agree, disputed if sources disagree, unclear if not enough independent evidence"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "0..1 score for how strongly the evidence supports the verdict"
+    },
+    "evidence_urls": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "2-5 URLs that informed the verdict (must be independent — not all same vendor/author)"
+    },
+    "supporting_quotes": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Key quoted snippets from the evidence sources"
+    },
+    "rationale": {
+      "type": "string",
+      "description": "One-sentence explanation of why the verdict was chosen"
+    }
+  },
+  "required": ["verdict", "confidence", "evidence_urls", "rationale"]
+}
+JSON
 ```
-# For each of the top 5 critical claims:
-mcp__perplexity-ask__perplexity_ask with:
-  messages: [{role: "user", content: "Verify this claim and find independent sources that support or dispute it: <claim>. Return: verdict (CONFIRMED/DISPUTED/UNVERIFIED), 2-3 supporting/disputing sources with URLs, one-sentence rationale."}]
+
+> **Schema format constraints (Tavily Research /research endpoint):**
+> 1. Top level must contain ONLY `properties` and (optionally) `required`. Do NOT include a top-level `"type": "object"` — Tavily rejects "unexpected keys".
+> 2. Each property MUST include a `description` field. Without it Tavily returns
+>    `Error: Property 'X' missing required 'description' field`.
+
+Now run the 5 fact-checks **in parallel** (they're independent — Tavily `mini` takes
+~30-60 sec per claim, so 5 parallel = ~60 sec total wall time):
+
+```bash
+mkdir -p ".firecrawl/research/$SLUG/L3"
+
+# Replace these with the actual top 5 claims extracted from L2/report.md:
+CLAIMS=(
+  "X is 3x faster than Y"
+  "X has poor ecosystem"
+  "Z released stable v2 in 2026"
+  "claim 4..."
+  "claim 5..."
+)
+
+for N in 1 2 3 4 5; do
+    CLAIM="${CLAIMS[$((N-1))]}"
+    tvly research \
+      "Verify this claim and find independent sources that support or dispute it: $CLAIM" \
+      --model mini \
+      --output-schema "$SCHEMA_FILE" \
+      --citation-format numbered \
+      -o ".firecrawl/research/$SLUG/L3/tavily-factcheck-$N.json" &
+done
+wait
 ```
 
-Save each response to `.firecrawl/research/$SLUG/L3/perplexity-factcheck-<n>.json`. Combine Perplexity's verdicts with the manual fact-check process below:
+> **If Tavily CLI unavailable** (`DEEP_RESEARCH_DISABLE_TAVILY_RESEARCH=1` or auth missing):
+> skill falls back to manual fact-check only (the prose process below). The schema-based
+> verdict is preferred but not required for L3 to complete.
 
-- If Perplexity says CONFIRMED + our manual check confirms → High confidence
-- If Perplexity says DISPUTED + our manual check flagged → include caveat in report
-- Disagreements between Perplexity and manual → re-run with Codex as tiebreaker
+**Codex tiebreaker.** When a Tavily verdict is `disputed` or `confidence < 0.6`, run a
+secondary Codex CLI verification on the same claim — second-model second opinion on
+already-uncertain claims, not on every claim (cost-efficient). `CODEX_HELPER` was
+defined at the top of this step:
 
-If Perplexity unavailable, skill proceeds with manual fact-check only (existing pre-v0.6 behavior).
+```bash
+for N in 1 2 3 4 5; do
+    CLAIM="${CLAIMS[$((N-1))]}"
+    JSON_FILE=".firecrawl/research/$SLUG/L3/tavily-factcheck-$N.json"
+    if [ ! -f "$JSON_FILE" ]; then
+        continue
+    fi
 
-Read L2/report.md + L3 new summaries. Identify the **top 5 most critical claims** — ones that would change the recommendation if wrong.
+    if jq -e '.confidence < 0.6 or .verdict == "disputed"' "$JSON_FILE" > /dev/null 2>&1; then
+        if [ -x "$CODEX_HELPER" ]; then
+            bash "$CODEX_HELPER" 180 \
+                ".firecrawl/research/$SLUG/L3/codex-factcheck-$N.md" \
+                "Verify or refute this claim independently: $CLAIM. Return verdict (CONFIRMED/DISPUTED/UNVERIFIED) with 2-3 source URLs." &
+        fi
+    fi
+done
+wait
+```
 
-For each, verify against 2+ **independent** sources (not from the same vendor/author):
+After all schema verdicts and Codex tiebreakers complete, manually review evidence URLs
+that aren't already in L1/L2/L3 sources — scrape them if they're load-bearing.
 
-Write `L3/fact-check.md`:
+Write `L3/fact-check.md` synthesizing the structured verdicts:
+
 ```markdown
 # Fact-check report
 
 ## Claim 1: "X is 3x faster than Y"
 **Source in report:** [7]
-**Verification attempts:**
-- ✓ Confirmed: [23] independent benchmark shows 2.8x
-- ✓ Confirmed: [25] community benchmark shows 3.1x
-- **Verdict:** CONFIRMED (High confidence)
+**Tavily verdict:** confirmed (confidence: 0.92)
+**Evidence URLs:**
+- [23] independent benchmark shows 2.8x
+- [25] community benchmark shows 3.1x
+
+**Rationale (Tavily):** Two independent benchmarks within the past 12 months both confirm
+the 3x range (2.8-3.1x), with consistent methodology.
+**Codex tiebreaker:** N/A (high-confidence Tavily verdict)
+**Final verdict:** CONFIRMED (High confidence)
 
 ## Claim 2: "X has poor ecosystem"
 **Source in report:** [12] (critic blog)
-**Verification attempts:**
-- ✗ Contradicted: [28] shows 500+ packages
-- ? Inconclusive: [30] mentions "some gaps" without specifics
-- **Verdict:** DISPUTED — downgrade to "community opinion, not fact"
+**Tavily verdict:** disputed (confidence: 0.45)
+**Evidence URLs:**
+- [28] shows 500+ packages (contradicts)
+- [30] mentions "some gaps" without specifics
+
+**Rationale (Tavily):** Direct contradiction — package count refutes "poor ecosystem"
+claim, "some gaps" comment is too vague to support it.
+**Codex tiebreaker:** DISPUTED — agrees with Tavily, finds same package count.
+**Final verdict:** DISPUTED — downgrade to "community opinion, not fact"
 
 ## Claim 3: ...
 ```
 
-**Verdict categories:**
-- **CONFIRMED** — 2+ independent sources agree
-- **DISPUTED** — sources disagree, needs careful framing
-- **UNVERIFIED** — couldn't find independent confirmation (downgrade in report)
+**Verdict categories (final, after merging Tavily + Codex):**
+- **CONFIRMED** — Tavily `confirmed` with `confidence ≥ 0.7`, OR `confirmed` with Codex agreement
+- **DISPUTED** — sources disagree (Tavily `disputed`, OR Tavily/Codex disagreement)
+- **UNVERIFIED** — Tavily `unclear` AND no Codex tiebreaker rescue (downgrade in report)
 
 ### Step 2.4a: CODEX CROSS-MODEL CHANNEL (optional, added v0.2)
 

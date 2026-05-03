@@ -30,7 +30,7 @@ Pay-per-use through existing project channels (already configured):
 - Tavily (Google dorks, advanced operators)
 - Firecrawl (page scrape after dork results)
 - Exa (related entities, neural search)
-- Perplexity (context enrichment)
+- Tavily Research — `tvly research --model mini` (context enrichment, replaces Perplexity in v0.9.0+)
 
 Optional CLI tools (recommended; install if missing):
 - `theHarvester` — `pipx install theHarvester`
@@ -56,7 +56,7 @@ See spec §13 for the full policy and reasoning.
 
 - **Email-in-breach lookup:** out of scope. Free HIBP only checks password hashes; paid Breached Account API requires subscription which is excluded by design. Use `haveibeenpwned.com` UI externally for comprehensive breach checks.
 - **Plaintext credential recovery:** out of scope by policy. The skill detects and locates leaked secrets but never records the value.
-- **Person enrichment:** limited to LinkedIn dorks, GitHub commits, Wayback, Perplexity context. No paid people-search APIs.
+- **Person enrichment:** limited to LinkedIn dorks, GitHub commits, Wayback, Tavily Research context. No paid people-search APIs.
 - **Darkweb mentions:** out of scope.
 
 ## Disclaimer

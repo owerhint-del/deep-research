@@ -204,26 +204,40 @@ Plus Tavily for each with `search_depth: "advanced"`.
 - Look for real benchmarks: "X benchmark comparison"
 - Russian-language search for additional angles
 
-### Step 2.3a-pplx: PERPLEXITY ANSWER CHANNEL (optional, parallel, v0.6.0+)
+### Step 2.3a-tvr: TAVILY RESEARCH ANSWER CHANNEL (optional, parallel, v0.9.0+)
 
-> Fault-tolerant — if Perplexity MCP isn't installed or `DEEP_RESEARCH_DISABLE_PERPLEXITY=1` is set, this step is skipped silently.
+> Fault-tolerant — if Tavily CLI isn't authed or `DEEP_RESEARCH_DISABLE_TAVILY_RESEARCH=1` is set, this step is skipped silently.
 
-Perplexity returns an **already-synthesized answer with citations** — a different output shape from Tavily/Exa (URL lists) and Codex (raw model response). For L2 contradictions, this gives a third independent "opinion" that can be directly cross-checked against Claude's synthesis of scraped sources.
+> **Why this exists.** This step replaces the v0.6.0 Perplexity Answer Channel. Tavily Research provides an **already-synthesized answer with citations** — a different output shape from Tavily search/Exa (URL lists) and Codex (raw model response). For L2 contradictions, this gives a third independent "opinion" that can be directly cross-checked against Claude's synthesis of scraped sources.
 
+Tavily Research runs multi-source agentic synthesis (Planning → WebSearch → Generating)
+and returns a cited markdown report. For L2 it's the Perplexity-equivalent output shape:
+synthesized answer + citations, in 30-120 sec.
+
+```bash
+# CLI variant (preferred — script-friendly):
+tvly research "<gap description from L2/gap-analysis.md>" \
+  --model auto \
+  --citation-format numbered \
+  -o .firecrawl/research/$SLUG/L2/tavily-research-gap.md
 ```
-mcp__perplexity-ask__perplexity_ask with:
-  messages: [{role: "user", content: "Research gap: <gap description from L2/gap-analysis.md>. Include inline [N] citations and Sources: list."}]
+
+Or via Skill tool:
+```
+Skill: tavily-research
+Args: <gap description from L2/gap-analysis.md>. Save to .firecrawl/research/$SLUG/L2/tavily-research-gap.md
 ```
 
-Save the response to `.firecrawl/research/$SLUG/L2/perplexity-gap.json` via the Write tool.
+Run in parallel with Step 2.4 scrape — typical Tavily Research wall time is 30-120 sec
+which overlaps well with Firecrawl scrape parallelism.
 
-In Step 2.5 (contradictions), compare Perplexity's answer against Claude's L2 synthesis:
+In Step 2.5 (contradictions), compare Tavily Research's answer against Claude's L2 synthesis:
 
 - **Same conclusion, same sources** → high confidence
 - **Same conclusion, different sources** → triangulation (good)
 - **Different conclusion** → flag in `contradictions.md` and investigate which is right
 
-Perplexity's citations are candidate URLs for additional Firecrawl scraping if they're not already in L1/L2 sources.
+Tavily Research's cited URLs are candidates for additional Firecrawl scraping if they're not already in L1/L2 sources.
 
 ### Step 2.3a-exa: EXA NEURAL CHANNEL (optional, parallel, v0.5.0+)
 
@@ -365,7 +379,12 @@ Checks: ≥8 L2 scrapes, each ≥500 bytes (not error page), each has matching `
 
 ### Step 2.5: CONTRADICTION DETECTION
 
-Read all summaries (L1 + L2). **If `L2/codex-gap.md` exists, read it too** — Codex's independent findings often surface contradictions Claude's scrapes miss.
+Read all summaries (L1 + L2). **Also read these channel artifacts if they exist** —
+their independent findings often surface contradictions Claude's scrapes miss:
+
+- `L2/codex-gap.md` — Codex CLI cross-model channel (different model)
+- `L2/tavily-research-gap.md` — Tavily Research cited synthesis (independent search index)
+- `L2/exa-gap.json` — Exa neural-search channel (different ranking)
 
 Look for **direct disagreements**:
 
@@ -405,9 +424,20 @@ Produce `L2/report.md` — this **supersedes** `L1/report.md`.
 
 **Before writing, re-read ALL `.sum.md` files (both L1 and L2).** The report must synthesize from summaries, not from memory of what you searched.
 
-**If `L2/codex-gap.md` exists and has content**, incorporate its findings alongside Claude's findings. Mark Codex-sourced facts with `(cross-model)` tag in the report so the reader knows which claims have two-model backing (higher confidence) vs one-model (lower confidence).
+**Channel attribution.** Mark facts in the report by which independent channel(s) confirmed them:
 
-**If Codex was unavailable** (check `L2/codex-gap.md.status`): add a note to the Confidence Summary section: `Note: single-model run — Codex channel was <SKIPPED|AUTH_FAILED|TIMEOUT|...>. Claims have Claude-only verification.`
+- `(cross-model)` — confirmed by Codex (`L2/codex-gap.md`)
+- `(answer-channel)` — confirmed by Tavily Research (`L2/tavily-research-gap.md`)
+- `(neural)` — confirmed by Exa (`L2/exa-gap.json`)
+
+A claim with two or more such tags is high-confidence triangulated. A claim only from
+Claude-scraped sources is single-channel — flag it as Medium confidence unless the source
+is itself authoritative (official docs, peer-reviewed paper, etc.).
+
+**Channel availability notes.** If a channel was unavailable, document it in the Confidence
+Summary section. Check the corresponding `.status` files (`L2/codex-gap.md.status`) and the
+existence of `tavily-research-gap.md` / `exa-gap.json`. Example note:
+`Note: Codex channel was TIMEOUT, Tavily Research available, Exa skipped (DEEP_RESEARCH_DISABLE_EXA=1). Claims rely on 2 of 3 cross-channel verifiers.`
 
 ```markdown
 # <Topic Title>

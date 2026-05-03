@@ -96,23 +96,87 @@ Outcomes:
 
 See [docs/OBSIDIAN_INTEGRATION.md](../../docs/OBSIDIAN_INTEGRATION.md) for full setup.
 
-## Perplexity Fact-Verifier (v0.6.0+)
+## Tavily Research Fact-Verifier (v0.9.0+ — replaces Perplexity)
 
-At the end of each recursive iteration, run Perplexity as a fast fact-verifier on the iteration's top claims:
+At the end of each recursive iteration, run Tavily Research as a citation-grounded
+fact-verifier on the iteration's top claims. Same role as the v0.6.0 Perplexity verifier
+(synthesized answer + citations); replaced because Perplexity is no longer in the stack.
 
+For each top 3–5 claims from iter-N's findings, run Tavily Research with the verdict
+schema (same schema shape as L3 Step 2.4 fact-check). **Important:**
+`tvly research --output-schema` expects a **PATH to a JSON file**, not inline JSON —
+write the schema to a temp file once per iteration and reuse it:
+
+```bash
+ITER=N
+mkdir -p ".firecrawl/research/$SLUG/L5/iterations/iter-$ITER"
+
+# Verdict schema (PATH-based, not inline)
+SCHEMA_FILE=$(mktemp -t tvly-verify-schema.XXXXXX.json)
+trap 'rm -f "$SCHEMA_FILE"' EXIT
+
+cat > "$SCHEMA_FILE" <<'JSON'
+{
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": ["confirmed", "disputed", "unclear"],
+      "description": "confirmed if 2+ independent sources agree, disputed if sources disagree, unclear otherwise"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "0..1 score for evidence strength"
+    },
+    "evidence_urls": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "2-5 independent URLs supporting or contradicting the claim"
+    },
+    "rationale": {
+      "type": "string",
+      "description": "One-sentence explanation of the verdict"
+    }
+  },
+  "required": ["verdict", "confidence", "evidence_urls", "rationale"]
+}
+JSON
+
+# NOTE: Tavily /research output_schema constraints:
+#   1. NO top-level "type": "object" — Tavily rejects "unexpected keys"
+#   2. Each property MUST include a "description" field
+
+# Replace with the iteration's top claims:
+CLAIMS=(
+  "<claim 1 text>"
+  "<claim 2 text>"
+  "<claim 3 text>"
+  "<claim 4 text>"
+  "<claim 5 text>"
+)
+
+for CLAIM_IDX in 1 2 3 4 5; do
+    CLAIM="${CLAIMS[$((CLAIM_IDX-1))]}"
+    tvly research \
+      "Verify: $CLAIM. Confirm or dispute with current sources." \
+      --model mini \
+      --output-schema "$SCHEMA_FILE" \
+      --citation-format numbered \
+      -o ".firecrawl/research/$SLUG/L5/iterations/iter-$ITER/tavily-verify-$CLAIM_IDX.json" &
+done
+wait
 ```
-# For each top 3-5 claims from iter-N's findings:
-mcp__perplexity-ask__perplexity_ask with:
-  messages: [{role: "user", content: "Verify: <claim>. Confirm or dispute with current sources."}]
-```
 
-Save verdicts to `.firecrawl/research/$SLUG/L5/iterations/iter-N/perplexity-verify.json`. Feed into the iteration's `peer-review-N.md` artifact.
+Feed the structured verdicts into the iteration's `peer-review-N.md` artifact. Claims
+verified `confirmed` with `confidence ≥ 0.7` are high-confidence; `disputed` claims are
+flagged for the iteration critic; `unclear` claims surface as open questions.
 
-**Why both Codex AND Perplexity?** They measure different things:
-- Codex = "what does a different model think about this?" (challenges Claude's reasoning)
-- Perplexity = "what do current web sources say about this?" (grounds claims in citations)
+**Why both Codex AND Tavily Research?** They measure different things:
+- **Codex** = "what does a different model think about this?" (challenges Claude's reasoning)
+- **Tavily Research** = "what do current web sources say about this, with structured verdict?" (grounds claims in citations + enforces verdict shape)
 
-Runs in parallel with Codex at each iteration's peer-review phase. If either unavailable, skill continues with the available ones.
+Runs in parallel with Codex at each iteration's peer-review phase. If `DEEP_RESEARCH_DISABLE_TAVILY_RESEARCH=1` or Tavily auth fails, skill continues with Codex only. If both unavailable, peer review proceeds Claude-only with a `Note: single-channel verification — Tavily and Codex unavailable` flag in the iteration's peer-review.
 
 ## Exa Deep-Researcher Channel (v0.5.0+)
 

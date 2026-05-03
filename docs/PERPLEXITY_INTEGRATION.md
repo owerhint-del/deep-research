@@ -1,4 +1,8 @@
-# Perplexity MCP Integration (v0.6.0+)
+# Perplexity MCP Integration (v0.6.0–v0.8.0) — DEPRECATED
+
+> ⚠️ **DEPRECATED in v0.9.0.** Perplexity has been removed from the deep-research stack. The "answer engine" role is now served by **Tavily Research** (`tvly research --model auto/mini/pro` with optional `--output-schema` for structured verdicts). See [CHANGELOG.md](../CHANGELOG.md) for the v0.9.0 migration guide. This document is retained for historical reference and for users on v0.6.0–v0.8.0 of the skill set.
+
+---
 
 How to use [Perplexity](https://perplexity.ai) as a fourth channel — an **answer engine** that returns synthesized responses with citations, complementing the raw-materials APIs (Firecrawl, Tavily, Exa) and the cross-model channel (Codex).
 

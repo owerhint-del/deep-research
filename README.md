@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-compatible-blue.svg)](https://claude.com/claude-code)
-[![Status](https://img.shields.io/badge/status-v0.6.0-brightgreen.svg)]()
+[![Status](https://img.shields.io/badge/status-v0.9.0-brightgreen.svg)]()
 [![Русский](https://img.shields.io/badge/lang-Русский-red.svg)](README.ru.md)
 
 ---
@@ -63,8 +63,10 @@ This ladder solves each:
 **Optional add-ons (each skill degrades gracefully if absent):**
 
 - [Exa MCP](https://exa.ai) — neural semantic search (L2+, v0.5.0+) · free tier 1000/mo
-- [Perplexity MCP](https://perplexity.ai) — answer engine (L0+ killer path, v0.6.0+)
+- [Tavily CLI](https://docs.tavily.com/documentation/tavily-cli) — `tvly research` answer engine with structured schema verdicts (L0/L2/L3/L5, v0.9.0+) · replaces Perplexity
 - [OpenAI Codex CLI](https://developers.openai.com/codex/cli) — cross-model channel (L2+, v0.2.0+) · needs ChatGPT Pro
+
+> **v0.9.0 breaking change.** Perplexity MCP integration removed. The Perplexity Answer Channel (L0/L2/L3/L5) is replaced by Tavily Research with `--output-schema` for structured fact-check verdicts. See [CHANGELOG.md](CHANGELOG.md) for the full v0.9.0 entry and migration guide.
 
 Full setup: see [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
@@ -179,11 +181,15 @@ Full library with example prompts and expected outputs: see [docs/USE_CASES.md](
 | Feature | What it gives you |
 |---------|-------------------|
 | **Composable ladder** | Each tier inherits the full pipeline of tiers below. No copy-pasted logic. |
+| **FC × Tavily diversity (v0.9.0+)** | Every search step runs Firecrawl + Tavily in parallel. Different indexes, different top results — broader coverage with one extra call. |
+| **Search-with-scrape one-shot (v0.9.0+)** | Firecrawl `--scrape --scrape-formats markdown,summary` returns clean markdown **and** an AI-summary per result in one call. Saves a separate scrape round in L1+. |
+| **Schema-based fact-check (L3, v0.9.0+)** | Tavily Research `--output-schema` returns a **structured verdict** (`verdict + evidence_urls + confidence + rationale`) per critical claim — not free-form text. Codex tiebreaker fires automatically when confidence < 0.6 or verdict is `disputed`. |
 | **Cross-model verification (L2+)** | Optional Codex CLI channel adds GPT-5.4 as a second, independent research voice. Different search index, different model, fewer blind spots. |
 | **Confidence grading** | Every L2+ claim is tagged H/M/L. You know which parts of the synthesis to trust. |
 | **Contradiction surfacing** | L2 explicitly writes a `contradictions.md` — no more hidden disagreements between sources. |
 | **Critic agent (L3+)** | Separate agent reviews the report adversarially before you see it. |
 | **Per-source summaries** | Never lose the audit trail — every cited fact points to a full scrape on disk. |
+| **Optional channels logging (v0.9.0+)** | `verify-research.sh` logs which independent channels (Codex / Tavily Research / Exa) actually ran each tier — informational only, never blocks. |
 
 ---
 
@@ -206,9 +212,10 @@ Full library with example prompts and expected outputs: see [docs/USE_CASES.md](
 | Component | Required? | Free tier? | Notes |
 |-----------|-----------|------------|-------|
 | Claude Code | Yes | — | Core runtime |
-| Firecrawl | Yes | 500 scrapes/mo | For all levels |
-| Tavily | L1+ | 1,000 searches/mo | Skip only if you use L0 exclusively |
-| Codex CLI | No | Requires ChatGPT Pro | Unlocks L2+ cross-model channel |
+| Firecrawl | Yes | 500 scrapes/mo | For all levels — search+scrape+summary in one call (v0.9.0+) |
+| Tavily | All tiers | 1,000 searches/mo | Diversity provider on every search step + `tvly research` for L0/L2/L3/L5 cited synthesis |
+| Codex CLI | No | Requires ChatGPT Pro | Unlocks L2+ cross-model channel; tiebreaker for L3 fact-check |
+| Exa MCP | No | 1,000/mo | Neural semantic search at L2+, academic at L4 |
 
 Total cost if you stick to free tiers: **$0**. With Codex: existing ChatGPT Pro ($200/mo) — no extra API fees.
 
@@ -223,14 +230,14 @@ Total cost if you stick to free tiers: **$0**. With Codex: existing ChatGPT Pro 
 - [x] v0.3 — Shared verification library + flagship live example
 - [x] v0.4 — Claude Code plugin manifest + skill migration
 - [x] v0.5 — Exa MCP (neural semantic search)
-- [x] v0.6 — Perplexity MCP (answer engine — L0 killer path)
+- [x] v0.6 — Perplexity MCP (answer engine — L0 killer path) · _removed in v0.9.0_
+- [x] v0.7 — Obsidian auto-sync for L5 vaults
+- [x] v0.8 — `/osint-research` skill (passive entity recon, hardened)
+- [x] v0.9 — **Removed Perplexity dependency.** L0 → Fireplexity-pattern (FC search-with-scrape + summary). L2/L3/L5 answer/fact-check channels → Tavily Research with `--output-schema` for structured verdicts. L3 fact-check now schema-based (verdict + evidence_urls + confidence + rationale). FC × Tavily diversity matrix on every search step.
 
 **Planned:**
-- [ ] v0.7 — Kagi as 5th backend for consumer research (anti-SEO-spam)
-- [ ] v0.7 — Streaming Codex output (reduce L3 latency)
-- [ ] v0.7 — MCP-based Codex integration (replace Bash shell-out)
-- [ ] v0.8 — Full Russian translation of ARCHITECTURE + TROUBLESHOOTING
-- [ ] v1.0 — Obsidian auto-sync for L5 vaults
+- [ ] v1.0 — Multi-LLM triangulation (Codex + Kimi + Claude consensus voting at L3+)
+- [ ] v1.x — FC `/agent` autonomous research channel for L3+ (with budget caps)
 
 See [CHANGELOG.md](CHANGELOG.md) for what's shipped.
 
